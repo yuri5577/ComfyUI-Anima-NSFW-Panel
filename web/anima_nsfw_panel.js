@@ -344,6 +344,38 @@ function applySeedToGraph(node, mode, seed) {
 }
 
 // ---------------------------------------------------------------------------
+// 作品 → 角色索引
+// ---------------------------------------------------------------------------
+// ⚠️ 性能要点：不要「每个作品都 filter 一遍全部角色」。
+// 实测 477 个作品 × 8000 角色 = 380 万次比较，切个分类就 23ms；
+// 而且 renderWorkList() 每次都会重跑。这里一次建好 Map，之后 O(1)。
+const WORK_INDEX = { key: "", map: null };
+
+function workIndex() {
+    const chars = STATE.charData?.chars;
+    if (!chars) return null;
+    if (WORK_INDEX.map && WORK_INDEX.key === STATE.charData) return WORK_INDEX.map;
+    const m = new Map();
+    for (const c of chars) {
+        const k = c.c || "(未标注作品)";
+        let arr = m.get(k);
+        if (!arr) { arr = []; m.set(k, arr); }
+        arr.push(c);
+    }
+    // 角色库里已按热度排序，所以各作品内部也是有序的
+    WORK_INDEX.key = STATE.charData;
+    WORK_INDEX.map = m;
+    return m;
+}
+
+/** 该作品下的角色（O(1)） */
+function workChars(cp) {
+    const m = workIndex();
+    if (!m) return [];
+    return m.get(cp || "(未标注作品)") || [];
+}
+
+// ---------------------------------------------------------------------------
 // 节点控件处理
 // ---------------------------------------------------------------------------
 
@@ -832,9 +864,34 @@ function closePanel() {
     document.querySelectorAll(`.${PANEL_CLASS}`).forEach((el) => el.remove());
 }
 
+/**
+ * 建 DOM 节点。
+ *
+ * ⚠️ 性能要点：样式**一次性**写进 `cssText`，不要用 `Object.assign(node.style, {...})`。
+ * 后者是每个属性一次 setter —— 面板开一次会建 10 万个节点、几十万次 setter，
+ * 在浏览器里会累积成明显的卡顿（实测每个节点平均 5~6 个属性）。
+ */
 function el(tag, style, props) {
     const node = document.createElement(tag);
-    if (style) Object.assign(node.style, style);
+    if (style) {
+        const parts = [];
+        for (const k in style) {
+            const v = style[k];
+            if (v === undefined || v === null) continue;
+            // camelCase -> kebab-case
+            const name = k.replace(/[A-Z]/g, (m) => "-" + m.toLowerCase());
+            parts.push(`${name}:${v}`);
+        }
+        if (parts.length) {
+            try {
+                node.style.cssText = parts.join(";");
+            } catch (e) {
+                for (const k in style) {
+                    if (style[k] !== undefined && style[k] !== null) node.style[k] = style[k];
+                }
+            }
+        }
+    }
     if (props) Object.assign(node, props);
     return node;
 }
@@ -1123,6 +1180,10 @@ function buildPanel(node, data) {
     });
     let workFilter = "";
 
+    // allWorks() 结果缓存：它依赖 STATE.data / STATE.charData，两者在本面板
+    // 生命周期内不变，所以算一次就够（原来每次 renderWorkList 都重算）
+    let worksCache = null;
+
     function renderWorkList() {
         workList.innerHTML = "";
         if (activeCat !== "copyright") return;
@@ -1133,7 +1194,7 @@ function buildPanel(node, data) {
             }));
             return;
         }
-        const works = allWorks();
+        const works = worksCache || (worksCache = allWorks());
         const withChars = works.filter((w) => w.n > 0).length;
         workList.appendChild(el("div", {
             fontSize: "10px", color: THEME.dim, margin: "2px 0 3px", lineHeight: "1.4",
@@ -1477,6 +1538,12 @@ function buildPanel(node, data) {
         return index.get(String(tag).toLowerCase()) || null;
     }
 
+    /**
+     * 选中/取消一个标签。
+     *
+     * 返回值：本次**受影响的标签键**（自己 + 互斥组里被顶掉的）。
+     * `sync()` 拿它做局部重绘 —— 只改这几张卡片的样式，不重建整个网格。
+     */
     function select(tag) {
         const key = tag.toLowerCase();
         const info = tagInfo(tag);
@@ -1484,8 +1551,9 @@ function buildPanel(node, data) {
             selected.delete(key);
             const i = order.findIndex((t) => t.toLowerCase() === key);
             if (i >= 0) order.splice(i, 1);
-            return;
+            return [key];
         }
+        const touched = [key];
         // 同组互斥
         if (info?.g) {
             for (const other of [...order]) {
@@ -1494,11 +1562,13 @@ function buildPanel(node, data) {
                     selected.delete(other.toLowerCase());
                     const i = order.indexOf(other);
                     if (i >= 0) order.splice(i, 1);
+                    touched.push(other.toLowerCase());
                 }
             }
         }
         selected.add(key);
         order.push(tag);
+        return touched;
     }
 
     function applyIntensity(level) {
@@ -1531,12 +1601,12 @@ function buildPanel(node, data) {
         sync();
     }
 
-    async function sync() {
-        const tagStr = joinTags(order);
-        writeTagsSilently(node, tagStr);
-        renderSelected();
-        renderGrid();
-        stats.textContent = `已选 ${order.length} 个标签 · ${tagStr.length} 字符`;
+    // 预览请求防抖：连续点标签时只发最后一次（原来每点一次就 POST 一次）
+    let syncPreviewTimer = 0;
+    let syncPreviewSeq = 0;
+
+    async function fetchPreviewText() {
+        const seq = ++syncPreviewSeq;
         try {
             const resp = await fetch(PREVIEW_URL, {
                 method: "POST",
@@ -1544,12 +1614,38 @@ function buildPanel(node, data) {
                 body: JSON.stringify(nodePayload(node)),
             });
             const data = await resp.json();
+            if (seq !== syncPreviewSeq) return;      // 已经有更新的请求了，丢弃
             previewBox.textContent = data.positive || "";
             previewBox.dataset.prompt = data.positive || "";
             node.__animansfwPreview = data;
             renderPreviewWidget(node);
         } catch (e) {
+            if (seq !== syncPreviewSeq) return;
             previewBox.textContent = `预览失败: ${e.message}`;
+        }
+    }
+
+    async function sync(previewNow, touched) {
+        const tagStr = joinTags(order);
+        writeTagsSilently(node, tagStr);
+        renderSelected();
+        // 只重画受影响的卡片（被点的 + 互斥组里被顶掉的），不重建整个网格。
+        // 传了 touched 就局部重绘；分类切换 / 搜索等场景没有 touched，走整体重建。
+        if (touched && touched.length && tagCards.size && !query.trim()) {
+            for (const key of touched) {
+                const hit = tagCards.get(key);
+                if (hit) paintTagCard(hit.card, hit.info);
+            }
+        } else {
+            renderGrid();
+        }
+        stats.textContent = `已选 ${order.length} 个标签 · ${tagStr.length} 字符`;
+        // 防抖 220ms：连点标签时不再每次都打后端
+        clearTimeout(syncPreviewTimer);
+        if (previewNow) {
+            await fetchPreviewText();
+        } else {
+            syncPreviewTimer = setTimeout(fetchPreviewText, 220);
         }
     }
 
@@ -2080,18 +2176,6 @@ function buildPanel(node, data) {
         charBar.appendChild(inp);
     }
 
-    // ---- 作品 → 角色 --------------------------------------------------
-    const _workChars = new Map();
-    /** 该作品下的角色（结果缓存） */
-    function workChars(cp) {
-        if (!STATE.charData) return [];
-        const key = cp || "(未标注作品)";
-        if (!_workChars.has(key)) {
-            _workChars.set(key, (STATE.charData.chars || [])
-                .filter((c) => (c.c || "(未标注作品)") === key));
-        }
-        return _workChars.get(key);
-    }
 
     /** 作品清单 = 标签库里的版权 tag + 角色库里有角色的作品（合并去重，按角色数排） */
     function allWorks() {
@@ -2762,12 +2846,29 @@ function buildPanel(node, data) {
             chip.appendChild(el("span", {}, { textContent: info?.zh ? `${info.zh}` : tag }));
             chip.appendChild(el("span", { opacity: "0.8", fontWeight: "700" }, { textContent: "×" }));
             chip.title = tag;
-            chip.onclick = () => { select(tag); sync(); };
+            chip.onclick = () => { sync(false, select(tag)); };
             selectedBar.appendChild(chip);
         }
     }
 
+    // 当前已渲染的「标签键 → { card, info }」。点标签时只重画受影响的这几张，
+    // 不用把整个网格拆掉重建（原来每个标签点击都会重建，实测 115 个 DOM 节点）。
+    const tagCards = new Map();
+
+    /** 单张标签卡的选中态（务必和 renderGrid 里的初始样式保持一致） */
+    function paintTagCard(card, info) {
+        const on = selected.has(String(info.t).toLowerCase());
+        const color = RATING_COLORS[info.r] || THEME.dim;
+        const s = card.style;
+        s.border = `1px solid ${on ? color : THEME.line}`;
+        s.background = on ? `${color}2e` : THEME.panel2;
+        s.color = on ? color : THEME.text;
+        const en = card.lastChild;
+        if (en && en.style) en.style.color = on ? color : THEME.dim;
+    }
+
     function renderGrid() {
+        tagCards.clear();
         if (view === "outfits") {
             renderOutfitGrid();
             return;
@@ -2838,8 +2939,11 @@ function buildPanel(node, data) {
             grid.appendChild(box);
             return;
         }
+        // ⚠️ 必须分页！这里曾经漏掉 slice，导致一次建 11097 张卡片
+        //    （11 万 DOM 节点 + 62 万次样式写入，全同步）—— 面板一开就卡死。
+        const shown = list.slice(0, CARD_LIMIT);
         const frag = document.createDocumentFragment();
-        for (const t of list) {
+        for (const t of shown) {
             const on = selected.has(t.t.toLowerCase());
             const color = RATING_COLORS[t.r] || THEME.dim;
             const item = el("button", {
@@ -2856,10 +2960,14 @@ function buildPanel(node, data) {
                 fontSize: "10px", color: on ? color : THEME.dim, opacity: "0.85",
             }, { textContent: t.t }));
             item.title = `${t.t}${t.g ? ` · 互斥组: ${t.g}` : ""}`;
-            item.onclick = () => { select(t.t); sync(); };
+            item.onclick = () => { sync(false, select(t.t)); };
+            tagCards.set(t.t.toLowerCase(), { card: item, info: t });
             frag.appendChild(item);
         }
         grid.appendChild(frag);
+        if (list.length > shown.length) {
+            appendMoreHint(list.length - shown.length, () => {});
+        }
     }
 
     function renderOutfitGrid() {
@@ -3047,7 +3155,13 @@ function buildPanel(node, data) {
     }
 
     // ---- 事件 ----
-    search.addEventListener("input", () => { query = search.value; renderGrid(); });
+    // 搜索防抖 160ms：快速打字时不用每个按键都把网格重建一遍
+    let searchTimer = 0;
+    search.addEventListener("input", () => {
+        query = search.value;            // 立刻记下来，预览/统计用的是最新值
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(renderGrid, 160);
+    });
     overlay.addEventListener("keydown", (e) => {
         if (e.key === "Escape") commit(true);
     });
@@ -3067,7 +3181,15 @@ function buildPanel(node, data) {
     sync();
     // 预取角色库（侧栏「游戏/作品」要靠它算每个作品的角色数）。
     // 必须在 buildPanel 作用域内调用 —— loadChars 是本函数的内部函数。
-    loadChars().catch(() => {});
+    // ⚠️ 但要**等首屏渲染完再取**：角色库有 1.7 MB，开面板时立刻去拉会和
+    //    标签库抢带宽和主线程（解析 + 建索引），首屏明显变慢。
+    //    用 requestIdleCallback 推到浏览器空闲时；老前端没有就退回定时器。
+    const prefetchChars = () => loadChars().catch(() => {});
+    if (typeof requestIdleCallback === "function") {
+        requestIdleCallback(prefetchChars, { timeout: 2500 });
+    } else {
+        setTimeout(prefetchChars, 400);
+    }
     // 让侧栏/网格按节点上已有的 mode 值渲染
     applyMode(mode, true);
     setTimeout(() => search.focus(), 40);

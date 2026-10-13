@@ -5,14 +5,36 @@ import importlib.util, os, sys, types
 # --- 自定位（脚本在 <包>/tools/ 下）---
 import os as _os
 import sys as _sys
+
+
+def _find_comfy_root(start):
+    """从 start 和当前工作目录往上找含 comfy/ 子目录的那一层（= ComfyUI 根）。"""
+    env = _os.environ.get("COMFY_ROOT")
+    if env and _os.path.isdir(_os.path.join(env, "comfy")):
+        return env
+    for start_dir in (_os.path.abspath(start), _os.getcwd()):
+        cur = start_dir
+        for _ in range(8):
+            if _os.path.isdir(_os.path.join(cur, "comfy")):
+                return cur
+            parent = _os.path.dirname(cur)
+            if parent == cur:
+                break
+            cur = parent
+    return env or _os.path.dirname(
+        _os.path.dirname(_os.path.dirname(_os.path.abspath(start))))
+
+
 TOOLS_DIR = _os.path.dirname(_os.path.abspath(__file__))
 PKG_ROOT = _os.path.dirname(TOOLS_DIR)
-COMFY_ROOT = _os.environ.get("COMFY_ROOT") or _os.path.dirname(
-    _os.path.dirname(_os.path.dirname(PKG_ROOT)))
+COMFY_ROOT = _find_comfy_root(PKG_ROOT)
 PY_EXE = _sys.executable
 
-sys.path.insert(0, r"COMFY_ROOT")
-sys.stdout.reconfigure(encoding="utf-8")
+# ⚠️ 必须用变量本身，不能写成 r"COMFY_ROOT"（那样插进 sys.path 的是
+#    字符串 "COMFY_ROOT"，等于没插，之后 import comfy 就失败）
+if _os.path.isdir(COMFY_ROOT):
+    _sys.path.insert(0, COMFY_ROOT)
+_sys.stdout.reconfigure(encoding="utf-8")
 ROOT = PKG_ROOT
 pkg=types.ModuleType("p"); pkg.__path__=[ROOT]; sys.modules["p"]=pkg
 py=types.ModuleType("p.py"); py.__path__=[os.path.join(ROOT,"py")]; sys.modules["p.py"]=py; pkg.py=py
@@ -121,7 +143,7 @@ ok(len(ln) == len({t["t"].lower() for t in ln}), "轻小说无重复")
 
 # 角色立绘数据
 csx = __import__("json").load(open(
-    r"{PKG_ROOT}\web\characters.json",
+    _os.path.join(PKG_ROOT, "web", "characters.json"),
     encoding="utf-8"))
 pv = (csx.get("meta") or {}).get("preview") or {}
 ok(pv.get("enabled") and "animadex" in str(pv.get("base", "")),

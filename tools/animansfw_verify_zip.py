@@ -7,6 +7,7 @@
 import importlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -16,18 +17,54 @@ import traceback
 # --- 自定位（脚本在 <包>/tools/ 下）---
 import os as _os
 import sys as _sys
+
+
+def _find_comfy_root(start):
+    """从 start 往上找含 comfy/ 子目录的那一层（= ComfyUI 根）。
+
+    ⚠️ 不能简单地"往上数三层"：那只在 `ComfyUI/custom_nodes/<包>/tools/`
+    这种标准布局下成立。而且如果解析错了、只是碰巧靠当前工作目录才导入成功，
+    换个目录跑就会 `ModuleNotFoundError: No module named 'comfy'`。
+    """
+    env = _os.environ.get("COMFY_ROOT")
+    if env and _os.path.isdir(_os.path.join(env, "comfy")):
+        return env
+    # 先看包所在位置能不能找到（标准布局 custom_nodes/<包>/tools/）
+    # 再从**当前工作目录**往上找 —— 常见用法就是在 ComfyUI 根下跑这个脚本，
+    # 而包被解压到了别处（比如临时目录）。
+    for start_dir in (_os.path.abspath(start), _os.getcwd()):
+        cur = start_dir
+        for _ in range(8):
+            if _os.path.isdir(_os.path.join(cur, "comfy")):
+                return cur
+            parent = _os.path.dirname(cur)
+            if parent == cur:
+                break
+            cur = parent
+    return env or _os.path.dirname(
+        _os.path.dirname(_os.path.dirname(_os.path.abspath(start))))
+
+
 TOOLS_DIR = _os.path.dirname(_os.path.abspath(__file__))
 PKG_ROOT = _os.path.dirname(TOOLS_DIR)
-COMFY_ROOT = _os.environ.get("COMFY_ROOT") or _os.path.dirname(
-    _os.path.dirname(_os.path.dirname(PKG_ROOT)))
+COMFY_ROOT = _find_comfy_root(PKG_ROOT)
 PY_EXE = _os.environ.get("PY_EXE") or _sys.executable
 
 
 sys.stdout.reconfigure(encoding="utf-8")
-VERIFY = os.environ.get("VERIFY_DIR") or PKG_ROOT
-COMFY = r"D:\ComfyUI-aki-v2\ComfyUI"
+# VERIFY = **包含本包的父目录**（即解压出来的那层），里面应当有 ComfyUI-Anima-NSFW-Panel/
+# 默认就从本脚本所在位置推：tools/ 的上一级是包，再上一级是解压目录
+VERIFY = os.environ.get("VERIFY_DIR") or _os.path.dirname(PKG_ROOT)
+COMFY = COMFY_ROOT
 PKG_DIR = os.path.join(VERIFY, "ComfyUI-Anima-NSFW-Panel")
 PKG_NAME = "ComfyUI-Anima-NSFW-Panel"
+# 跑 JS 测试用的 node（可由环境变量指定）
+node = os.environ.get("NODE_EXE") or shutil.which("node") or "node"
+# 这些路径下面的各个小节都要用，所以放在模块级（原来 js/node 定义在
+# `if mod is not None:` 块里，模块级的冒烟测试段引用它们会 NameError）
+js = os.path.join(PKG_DIR, "web", "anima_nsfw_panel.js")
+_py = os.environ.get("PY_EXE") or PY_EXE
+TOOLS = TOOLS_DIR
 
 ok = True
 
@@ -224,15 +261,11 @@ if mod is not None:
     check("预设里没有权重残留", not bad, bad[:3])
 
     # 6. 前端 JS 资源
-    js = os.path.join(PKG_DIR, "web", "anima_nsfw_panel.js")
     check("面板 JS 存在", os.path.isfile(js))
-    node = shutil.which("node")
-    if not node:
-        node = r"C:\Users\65482\.dsh\dsh-runtimes\dsh-primary-runtime\dependencies\node\bin\node.exe"
-    if os.path.isfile(node):
+    if shutil.which(node) or os.path.isfile(node):
         tmp = os.path.join(tempfile.gettempdir(), "verify_panel.mjs")
         shutil.copyfile(js, tmp)
-        p = subprocess.run([node, "--check", tmp], capture_output=True, text=True)
+        p = subprocess.run([node, "--check", tmp], capture_output=True, text=True, encoding="utf-8", errors="replace")
         check("面板 JS 语法", p.returncode == 0, p.stderr.strip()[:200])
     else:
         print("SKIP  未找到 node，跳过 JS 语法检查")
@@ -248,8 +281,7 @@ if mod is not None:
           not os.path.isfile(os.path.join(PKG_DIR, "custom_library.json")))
 
 # 6b2. SFW 双模式自测
-_py = os.environ.get("PY_EXE") or PY_EXE
-_sfw_test = os.path.join(TOOLS_DIR, "animansfw_sfw_selftest.py")
+_sfw_test = os.path.join(TOOLS, "animansfw_sfw_selftest.py")
 if os.path.isfile(_sfw_test):
     p = subprocess.run([_py, _sfw_test], capture_output=True, text=True,
                        encoding="utf-8", errors="replace")
@@ -263,13 +295,13 @@ else:
     print("SKIP  缺少 SFW 自测脚本，跳过")
 
 # 6c. 离线冒烟测试（现代 + 低版本前端），不需要启动 ComfyUI
-SMOKE = os.path.join(TOOLS_DIR, "animansfw_panel_smoke.mjs")
-FIXTURE = os.path.join(TOOLS_DIR, "tags_fixture.json")
+SMOKE = os.path.join(TOOLS, "animansfw_panel_smoke.mjs")
+FIXTURE = os.path.join(TOOLS, "tags_fixture.json")
 _py = os.environ.get("PY_EXE") or PY_EXE
 _dshpy = _py
 if os.path.isfile(FIXTURE) and os.path.isfile(SMOKE):
     subprocess.run([_dshpy, os.path.join(os.path.dirname(SMOKE), "animansfw_make_fixture.py")],
-                   capture_output=True, text=True)
+                   capture_output=True, text=True, encoding="utf-8", errors="replace")
     for mode, label in (([], "现代前端"), (["--legacy"], "低版本前端"),
                         (["--oldfe"], "老前端契约 1.12.x")):
         p = subprocess.run([node, SMOKE, *mode, js], capture_output=True, text=True,
@@ -282,6 +314,31 @@ if os.path.isfile(FIXTURE) and os.path.isfile(SMOKE):
                 print("        " + e)
 else:
     print("SKIP  缺少冒烟测试或 fixture，跳过")
+
+# 6d. 性能回归门限（离线基准，不需要启动 ComfyUI）
+_PERF = os.path.join(TOOLS, "animansfw_perf.mjs")
+if os.path.isfile(_PERF):
+    _r = subprocess.run([node, _PERF], capture_output=True, text=True,
+                        encoding="utf-8", errors="replace", timeout=900)
+    _out = _r.stdout or ""
+    # 开面板那行的格式： 开面板（首次）    —   1981   2068  （...）
+    _m = re.search(r"开面板（首次）\s+[—\-]\s+(\d+)\s+(\d+)", _out)
+    if _m:
+        _dom, _sty = int(_m.group(1)), int(_m.group(2))
+        # 修前是 110315 / 625184；这里卡住数量级，防分页或批量化被改回去
+        check("性能：开面板建 DOM < 8000", _dom < 8000, f"{_dom}")
+        check("性能：开面板写 style < 8000", _sty < 8000, f"{_sty}")
+    else:
+        check("性能基准可解析", False, (_out or _r.stderr or "")[-160:])
+    _m2 = re.search(r"连点 5 个标签的预览请求.*?稳定后\s*(\d+)\s*次", _out)
+    if _m2:
+        check("性能：预览请求已防抖（连点 5 次 → 1 次）",
+              int(_m2.group(1)) <= 2, f"{_m2.group(1)} 次")
+    _m3 = re.search(r"点一个标签\s+([\d.]+) ms\s+(\d+)\s+(\d+)", _out)
+    if _m3:
+        check("性能：点标签建 DOM < 40", int(_m3.group(2)) < 40, f"{_m3.group(2)}")
+else:
+    print("SKIP  缺少性能基准脚本，跳过")
 
 # 7. 示例工作流
 wf = os.path.join(PKG_DIR, "workflows", "Anima-NSFW面板-调制引导.json")
@@ -296,7 +353,7 @@ except Exception as e:
     check("示例工作流", False, e)
 
 # 8. 压缩包本体里不能有 __pycache__/.pyc（导入会就地生成，所以查 zip 而不是查目录）
-zip_path = r"C:\Users\65482\Documents\deepseek-harness\default-workspace\_dist\ComfyUI-Anima-NSFW-Panel-v1.0.0.zip"
+zip_path = os.environ.get("ZIP_PATH") or ""
 if os.path.isfile(zip_path):
     import zipfile
 
