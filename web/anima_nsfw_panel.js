@@ -1350,13 +1350,35 @@ function buildPanel(node, data) {
     });
     let workFilter = "";
 
+    // 作品列表一次显示多少个（合并 copies 后有 235 个作品，一屏放不下）
+    const WORK_PAGE = 120;
+    let workShown = WORK_PAGE;
+
     // allWorks() 结果缓存：它依赖 STATE.data / STATE.charData，两者在本面板
     // 生命周期内不变，所以算一次就够（原来每次 renderWorkList 都重算）
     let worksCache = null;
 
+    /**
+     * 当前 `activeCat` 是否属于「作品」上下文。
+     *
+     * ⚠️ 不能只查标签库的**版权标签** —— 角色库里还有一些作品没有对应的版权标签
+     * （`closers` 就是，21 个角色），点它们时 isWork 会是 false：
+     * 网格不铺角色卡（全空）、作品列表也被清空（看起来像"左栏消失了"）。
+     * 改成查 `worksCache`（= allWorks()，已经把版权标签和角色库 copies 合并）。
+     */
+    function inWorkContext() {
+        if (activeCat === "copyright") return true;
+        const low = String(activeCat).toLowerCase();
+        const works = worksCache || (worksCache = allWorks());
+        return works.some((w) => String(w.cp).toLowerCase() === low);
+    }
+
     function renderWorkList() {
         workList.innerHTML = "";
-        if (activeCat !== "copyright") return;
+        // ⚠️ 不能只判 `activeCat !== "copyright"` —— 点某个作品后 activeCat 会变成
+        //    那个作品名（如 "genshin impact"），列表就整个清空，
+        //    看起来像「左侧那一栏消失了」（用户报的）。
+        if (!inWorkContext()) return;
         if (!STATE.charData) {
             workList.appendChild(el("div", {
                 fontSize: "10px", color: THEME.dim, margin: "4px 0",
@@ -1394,7 +1416,9 @@ function buildPanel(node, data) {
         const q = workFilter.trim().toLowerCase();
         const pool = q ? works.filter((w) => (w.zh + " " + w.cp).toLowerCase().includes(q))
                        : works;
-        const shown = q ? pool : pool.slice(0, 120);
+        // ⚠️ 合并 copies 后作品有 235 个，`.slice(0, 120)` 会**静默**砍掉一半
+        //    （「封印者」这种角色数少的正好排在后面，用户就点不到）。
+        const shown = q ? pool : pool.slice(0, workShown);
         if (!shown.length) {
             box.appendChild(el("div", { fontSize: "10px", color: THEME.dim },
                 { textContent: "没有匹配的作品" }));
@@ -1473,10 +1497,34 @@ function buildPanel(node, data) {
             }
         }
         if (!q && pool.length > shown.length) {
-            box.appendChild(el("div", {
-                fontSize: "10px", color: THEME.dim, marginTop: "4px",
-                textContent: `另有 ${pool.length - shown.length} 个作品，用上面的搜索框找`,
-            }));
+            // ⚠️ 合并角色库的 copies 后有 235 个作品，原来只显示前 120 并静默截断 ——
+            //    角色数少的作品（如「封印者」21 个）正好排在后面，用户就点不到。
+            //    给一个明确的「显示更多」，别让人以为"就这么多"。
+            const moreBtn = el("button", {
+                marginTop: "4px", width: "100%", padding: "4px 8px",
+                borderRadius: "6px", cursor: "pointer", fontSize: "10px",
+                border: `1px solid ${THEME.line}`, background: THEME.panel2,
+                color: THEME.text,
+            }, {
+                textContent: `显示更多（还有 ${pool.length - shown.length} 个作品）`,
+            });
+            moreBtn.onclick = () => {
+                workShown += WORK_PAGE;
+                renderWorkList();
+            };
+            workList.appendChild(moreBtn);
+        } else if (!q && pool.length > WORK_PAGE) {
+            const lessBtn = el("button", {
+                marginTop: "4px", width: "100%", padding: "4px 8px",
+                borderRadius: "6px", cursor: "pointer", fontSize: "10px",
+                border: `1px solid ${THEME.line}`, background: THEME.panel2,
+                color: THEME.dim,
+            }, { textContent: "收起到前 120 个" });
+            lessBtn.onclick = () => {
+                workShown = WORK_PAGE;
+                renderWorkList();
+            };
+            workList.appendChild(lessBtn);
         }
     }
 
@@ -2393,6 +2441,11 @@ function buildPanel(node, data) {
         })();
         try {
             const d = await STATE.charLoading;
+            // ⚠️ 必须让作品列表缓存失效：allWorks() 的「每个作品有几个角色」
+            //    依赖 charData，缓存下来的话角色数会永远是 0。
+            worksCache = null;
+            workShown = WORK_PAGE;
+            renderWorkList();
             renderCharBar();
             renderGrid();
             return d;
@@ -3210,9 +3263,10 @@ function buildPanel(node, data) {
         grid.innerHTML = "";
         const q = query.trim().toLowerCase();
 
-        // 选中某个作品时：先用卡片铺开这个作品的角色，再显示作品标签本身
-        const isWork = activeCat !== "all"
-            && (data.tags || []).some((t) => t.c === "copyright" && t.t === activeCat);
+        // 选中某个作品时：先用卡片铺开这个作品的角色，再显示作品标签本身。
+        // ⚠️ 同样不能只查版权标签 —— `closers` 这类只存在于角色库里的作品
+        //    会被判成"不是作品"，网格全空（用户报的「点封印者没角色」）。
+        const isWork = activeCat !== "all" && inWorkContext();
         // 换了作品/分类/搜索词就回到第一批
         if (grid.__charKey !== `${activeCat}|${q}`) {
             grid.__charKey = `${activeCat}|${q}`;
