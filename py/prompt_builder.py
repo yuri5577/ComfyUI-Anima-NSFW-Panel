@@ -30,7 +30,8 @@ from .sfw import (
     is_sfw,
 )
 from .sfw import filter_tokens as _sfw_filter
-from .tags import LOCKED_CHARACTERS, NEGATIVE_BASE, NEGATIVE_EXTRA, TAG_INDEX
+from .tags import (LOCKED_CHARACTERS, NEGATIVE_BASE, NEGATIVE_EXTRA,
+                    QUALITY_PRESETS, TAG_INDEX)
 
 # ---------------------------------------------------------------------------
 # 标签清洗
@@ -703,11 +704,27 @@ def compose_negative(
 
 
 def preview(payload: Dict[str, object]) -> Dict[str, object]:
-    """给前端预览用：返回正/负面 + 结构化信息。"""
+    """给前端预览用：返回正/负面 + 结构化信息。
+
+    ⚠️ `quality_preset` 这里收到的是**档位名**（面板就是这么传的，例如「无（自己写）」），
+    必须先查表翻译成实际质量词。查不到才当成字面标签串（兼容外部脚本直接传
+    "best quality, absurdres"）。
+
+    直接把它当标签串会出事：「无（自己写）」这个档位的表值是**空字符串**（即不加质量词），
+    但字面档位名会被当成标签写进提示词 —— 实测预览里出现过 `无（自己写）, best quality, 1girl…`。
+    节点路径走 `QUALITY_PRESETS.get(...)` 所以没这个问题。
+    """
+    raw_q = str(payload.get("quality_preset", "") or "")
+    if raw_q in QUALITY_PRESETS:
+        q = QUALITY_PRESETS[raw_q]
+    elif raw_q and not raw_q.startswith("无"):
+        q = raw_q
+    else:
+        q = ""
     pos = compose_prompt(
         tags=str(payload.get("tags", "")),
         intensity=str(payload.get("intensity", "hard")),
-        quality_preset=str(payload.get("quality_preset", "base（原版 28~32 步）")),
+        quality_preset=q,
         extra_front=str(payload.get("extra_front", "")),
         extra_tail=str(payload.get("extra_tail", "")),
         caption_enabled=bool(payload.get("caption_enabled", True)),

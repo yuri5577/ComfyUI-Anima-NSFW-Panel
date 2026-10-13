@@ -48,3 +48,17 @@ python tools/animansfw_make_fixture.py
 ```bash
 python tools/animansfw_import_characters.py
 ```
+
+## 4. 真浏览器测试（需要先启动 ComfyUI）
+
+用 headless Chrome + CDP 在真实页面里跑，需要本机有 Chrome 或 Edge。
+
+```bash
+node tools/animansfw_browser_e2e.mjs     # 开面板 / 点标签 / 防抖 / 截图
+node tools/animansfw_browser_views.mjs   # 每个视图点一遍 + 剧情套用
+```
+
+会启动独立的 headless 实例（独立临时 profile），**不影响你自己开着的浏览器**。
+两个脚本都会把截图写到当前工作目录（`animansfw_panel_screenshot.png` /
+`animansfw_view_*.png`），可以直接看面板长什么样。
+

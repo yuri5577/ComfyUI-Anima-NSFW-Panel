@@ -1,6 +1,6 @@
 [project]
 name = "comfyui-anima-nsfw-panel"
-version = "1.9.4"
+version = "1.9.5"
 description = "Anima 专用 NSFW 提示词可视化面板（含剧情模式 11 条故事线 / 种子随机-固定 / 角色立绘 / 轻小说 38 部 / SFW-NSFW 双模式 / 518 套服装预设 / 297 个姿势参考 / 8000 个角色 / 104 个作品标签 / 全中文 / 自定义库）+ 负面构建器 + Modulation Guidance（调制引导）模型补丁"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
