@@ -1,0 +1,1313 @@
+{
+  "id": "4c6309e5-953e-4d77-958b-1e155e5a147a",
+  "revision": 0,
+  "last_node_id": 22,
+  "last_link_id": 26,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "Note",
+      "pos": [
+        60.0,
+        60.0
+      ],
+      "size": [
+        560.0,
+        420.0
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "Note"
+      },
+      "title": "使用说明",
+      "widgets_values": [
+        "Anima NSFW 面板 + 调制引导\n────────────────────────\n【出图流程】\n01 模型 → 02 提示词(新面板) → 03 采样 → 04 二次放大 → 05 保存\n\n【新面板怎么用】\n· 双击/点选「Anima NSFW 提示词面板」上的「🎛 打开 NSFW 面板」按钮；\n· 左侧强度档位一键铺底；分类 + 搜索找标签；同互斥组会自动互相取消；\n· 面板底部「应用并关闭」会把标签写回节点的 tags 控件。\n\n【调制引导】\n· 需要 ComfyUI/models/model_patches/pooled_text_proj-0611.safetensors；\n· 默认 profile = step_i8_skip27；若手部/肢体崩坏，改成 step_i14（安全）；\n· 不用时可把该节点的 enabled 关掉，或直接旁路（Ctrl+B）。\n\n【常用改动】\n· 分辨率：改 01 里的宽度/高度；\n· 步数/cfg：用 Turbo LoRA 时 12 步 / cfg 1；关掉 Turbo 改成 28~32 步 / cfg 3；\n· 二次放大倍数与降噪在 04 里。\n"
+      ],
+      "widgets_values_named": {
+        "text": "Anima NSFW 面板 + 调制引导\n────────────────────────\n【出图流程】\n01 模型 → 02 提示词(新面板) → 03 采样 → 04 二次放大 → 05 保存\n\n【新面板怎么用】\n· 双击/点选「Anima NSFW 提示词面板」上的「🎛 打开 NSFW 面板」按钮；\n· 左侧强度档位一键铺底；分类 + 搜索找标签；同互斥组会自动互相取消；\n· 面板底部「应用并关闭」会把标签写回节点的 tags 控件。\n\n【调制引导】\n· 需要 ComfyUI/models/model_patches/pooled_text_proj-0611.safetensors；\n· 默认 profile = step_i8_skip27；若手部/肢体崩坏，改成 step_i14（安全）；\n· 不用时可把该节点的 enabled 关掉，或直接旁路（Ctrl+B）。\n\n【常用改动】\n· 分辨率：改 01 里的宽度/高度；\n· 步数/cfg：用 Turbo LoRA 时 12 步 / cfg 1；关掉 Turbo 改成 28~32 步 / cfg 3；\n· 二次放大倍数与降噪在 04 里。\n"
+      },
+      "color": "#3a3f2f",
+      "bgcolor": "#1f2418"
+    },
+    {
+      "id": 2,
+      "type": "UNETLoader",
+      "pos": [
+        60.0,
+        514.0
+      ],
+      "size": [
+        400.0,
+        100.0
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            1
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "UNETLoader"
+      },
+      "title": "模型：Anima UNet",
+      "widgets_values": [
+        "anima_baseV10.safetensors",
+        "default"
+      ],
+      "widgets_values_named": {
+        "unet_name": "anima_baseV10.safetensors",
+        "weight_dtype": "default"
+      }
+    },
+    {
+      "id": 3,
+      "type": "CLIPLoader",
+      "pos": [
+        60.0,
+        648.0
+      ],
+      "size": [
+        400.0,
+        130.0
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "CLIP",
+          "type": "CLIP",
+          "links": [
+            2,
+            5,
+            6
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CLIPLoader"
+      },
+      "title": "文本编码器：Qwen3-0.6B",
+      "widgets_values": [
+        "qwen_3_06b_base.safetensors",
+        "stable_diffusion",
+        "default"
+      ],
+      "widgets_values_named": {
+        "clip_name": "qwen_3_06b_base.safetensors",
+        "type": "stable_diffusion",
+        "device": "default"
+      }
+    },
+    {
+      "id": 4,
+      "type": "VAELoader",
+      "pos": [
+        60.0,
+        812.0
+      ],
+      "size": [
+        400.0,
+        80.0
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "links": [
+            16,
+            24
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VAELoader"
+      },
+      "title": "VAE：Qwen Image VAE",
+      "widgets_values": [
+        "qwen_image_vae.safetensors"
+      ],
+      "widgets_values_named": {
+        "vae_name": "qwen_image_vae.safetensors"
+      }
+    },
+    {
+      "id": 5,
+      "type": "LoraLoaderModelOnly",
+      "pos": [
+        60.0,
+        926.0
+      ],
+      "size": [
+        400.0,
+        100.0
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            3
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoraLoaderModelOnly"
+      },
+      "title": "LoRA：Turbo（12 步 / CFG 1）",
+      "widgets_values": [
+        "Anima lora\\anima-turbo-lora-v0.2.safetensors",
+        1.0
+      ],
+      "widgets_values_named": {
+        "lora_name": "Anima lora\\anima-turbo-lora-v0.2.safetensors",
+        "strength_model": 1.0
+      }
+    },
+    {
+      "id": 6,
+      "type": "AnimaNsfwModGuidance",
+      "pos": [
+        620.0,
+        60.0
+      ],
+      "size": [
+        420.0,
+        420.0
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 3
+        },
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 2
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            4
+          ]
+        },
+        {
+          "name": "状态",
+          "type": "STRING",
+          "links": []
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "AnimaNsfwModGuidance"
+      },
+      "title": "Anima 调制引导（可关）",
+      "widgets_values": [
+        "pooled_text_proj-0611.safetensors",
+        "light_w1.5（先试这个）",
+        "absurdres, masterpiece, score_9",
+        "worst quality, low quality, score_1",
+        "1girl, solo, nude, large breasts, blush, looking at viewer, on bed, close-up, best quality, absurdres",
+        true,
+        3.0,
+        8,
+        27,
+        0,
+        0.25,
+        0.0
+      ],
+      "widgets_values_named": {
+        "adapter": "pooled_text_proj-0611.safetensors",
+        "profile": "light_w1.5（先试这个）",
+        "quality_tags": "absurdres, masterpiece, score_9",
+        "quality_neg": "worst quality, low quality, score_1",
+        "base_prompt": "1girl, solo, nude, large breasts, blush, looking at viewer, on bed, close-up, best quality, absurdres",
+        "enabled": true,
+        "w": 3.0,
+        "start_layer": 8,
+        "end_layer": 27,
+        "taper": 0,
+        "taper_scale": 0.25,
+        "final_w": 0.0
+      }
+    },
+    {
+      "id": 7,
+      "type": "ModelSamplingAuraFlow",
+      "pos": [
+        60.0,
+        1060.0
+      ],
+      "size": [
+        400.0,
+        80.0
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 4
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            11,
+            19
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "ModelSamplingAuraFlow"
+      },
+      "title": "采样偏移 shift",
+      "widgets_values": [
+        3.0,
+        "flow"
+      ],
+      "widgets_values_named": {
+        "shift": 3.0,
+        "sampling": "flow"
+      }
+    },
+    {
+      "id": 8,
+      "type": "AnimaNsfwPromptBuilder",
+      "pos": [
+        620.0,
+        514.0
+      ],
+      "size": [
+        470.0,
+        400.0
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "positive",
+          "type": "STRING",
+          "links": [
+            7
+          ]
+        },
+        {
+          "name": "info",
+          "type": "STRING",
+          "links": []
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "AnimaNsfwPromptBuilder"
+      },
+      "title": "Anima NSFW 提示词面板",
+      "widgets_values": [
+        "1girl, solo, large breasts, blush, looking at viewer, on bed, close-up, best quality, absurdres, detailed skin, explicit, uncensored",
+        "hard",
+        "turbo（Turbo LoRA 12 步）",
+        true,
+        1234,
+        true,
+        true,
+        "经典水手服,,serafuku, pleated skirt, sailor collar, neckerchief, thighhighs, loafers",
+        "Arms Behind Back,,arms behind back, hands behind back, arms behind",
+        "",
+        "",
+        "",
+        ""
+      ],
+      "widgets_values_named": {
+        "tags": "1girl, solo, large breasts, blush, looking at viewer, on bed, close-up, best quality, absurdres, detailed skin, explicit, uncensored",
+        "intensity": "hard",
+        "quality_preset": "turbo（Turbo LoRA 12 步）",
+        "caption_enabled": true,
+        "caption_seed": 1234,
+        "sort_tags": true,
+        "dedupe_tags": true,
+        "outfit_preset": "经典水手服,,serafuku, pleated skirt, sailor collar, neckerchief, thighhighs, loafers",
+        "pose_preset": "Arms Behind Back,,arms behind back, hands behind back, arms behind",
+        "caption_text": "",
+        "extra_front": "",
+        "extra_tail": "",
+        "upstream_prompt": ""
+      }
+    },
+    {
+      "id": 9,
+      "type": "AnimaNsfwNegativeBuilder",
+      "pos": [
+        620.0,
+        948.0
+      ],
+      "size": [
+        470.0,
+        300.0
+      ],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "negative",
+          "type": "STRING",
+          "links": [
+            8
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "AnimaNsfwNegativeBuilder"
+      },
+      "title": "Anima NSFW 负面构建器",
+      "widgets_values": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        false,
+        false,
+        "",
+        ""
+      ],
+      "widgets_values_named": {
+        "base_enabled": true,
+        "手部修复": true,
+        "面部修复": true,
+        "人体结构": true,
+        "NSFW安全": true,
+        "画面干净": false,
+        "防伪影": false,
+        "extra_text": "",
+        "upstream_negative": ""
+      }
+    },
+    {
+      "id": 10,
+      "type": "CLIPTextEncode",
+      "pos": [
+        620.0,
+        1282.0
+      ],
+      "size": [
+        470.0,
+        200.0
+      ],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "text",
+          "type": "STRING",
+          "link": 7,
+          "widget": {
+            "name": "text"
+          }
+        },
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 5
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": [
+            12,
+            20
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CLIPTextEncode"
+      },
+      "title": "正向编码",
+      "widgets_values": [
+        ""
+      ],
+      "widgets_values_named": {
+        "text": ""
+      }
+    },
+    {
+      "id": 11,
+      "type": "CLIPTextEncode",
+      "pos": [
+        620.0,
+        1516.0
+      ],
+      "size": [
+        470.0,
+        200.0
+      ],
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "text",
+          "type": "STRING",
+          "link": 8,
+          "widget": {
+            "name": "text"
+          }
+        },
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 6
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": [
+            13,
+            21
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CLIPTextEncode"
+      },
+      "title": "负向编码",
+      "widgets_values": [
+        ""
+      ],
+      "widgets_values_named": {
+        "text": ""
+      }
+    },
+    {
+      "id": 12,
+      "type": "PrimitiveInt",
+      "pos": [
+        1180.0,
+        60.0
+      ],
+      "size": [
+        320.0,
+        60.0
+      ],
+      "flags": {},
+      "order": 11,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "INT",
+          "type": "INT",
+          "links": [
+            9
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "PrimitiveInt"
+      },
+      "title": "宽度",
+      "widgets_values": [
+        1024
+      ],
+      "widgets_values_named": {
+        "value": 1024
+      }
+    },
+    {
+      "id": 13,
+      "type": "PrimitiveInt",
+      "pos": [
+        1180.0,
+        154.0
+      ],
+      "size": [
+        320.0,
+        60.0
+      ],
+      "flags": {},
+      "order": 12,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "INT",
+          "type": "INT",
+          "links": [
+            10
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "PrimitiveInt"
+      },
+      "title": "高度",
+      "widgets_values": [
+        1216
+      ],
+      "widgets_values_named": {
+        "value": 1216
+      }
+    },
+    {
+      "id": 14,
+      "type": "EmptyLatentImage",
+      "pos": [
+        1180.0,
+        248.0
+      ],
+      "size": [
+        320.0,
+        110.0
+      ],
+      "flags": {},
+      "order": 13,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "width",
+          "type": "INT",
+          "link": 9,
+          "widget": {
+            "name": "width"
+          }
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "link": 10,
+          "widget": {
+            "name": "height"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            14
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "EmptyLatentImage"
+      },
+      "title": "空 Latent",
+      "widgets_values": [
+        1024,
+        1024,
+        1
+      ],
+      "widgets_values_named": {
+        "width": 1024,
+        "height": 1024,
+        "batch_size": 1
+      }
+    },
+    {
+      "id": 15,
+      "type": "KSampler",
+      "pos": [
+        1180.0,
+        392.0
+      ],
+      "size": [
+        360.0,
+        330.0
+      ],
+      "flags": {},
+      "order": 14,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 11
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 12
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 13
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 14
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            15,
+            18
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "KSampler"
+      },
+      "title": "采样：基础出图（12 步 / CFG 1）",
+      "widgets_values": [
+        20260214,
+        "randomize",
+        12,
+        1.0,
+        "er_sde",
+        "simple",
+        1.0
+      ],
+      "widgets_values_named": {
+        "seed": 20260214,
+        "control_after_generate": "randomize",
+        "steps": 12,
+        "cfg": 1.0,
+        "sampler_name": "er_sde",
+        "scheduler": "simple",
+        "denoise": 1.0
+      }
+    },
+    {
+      "id": 16,
+      "type": "VAEDecode",
+      "pos": [
+        1180.0,
+        756.0
+      ],
+      "size": [
+        320.0,
+        60.0
+      ],
+      "flags": {},
+      "order": 15,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 15
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 16
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            17
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VAEDecode"
+      },
+      "title": "解码",
+      "widgets_values": [],
+      "widgets_values_named": {}
+    },
+    {
+      "id": 17,
+      "type": "PreviewImage",
+      "pos": [
+        1180.0,
+        850.0
+      ],
+      "size": [
+        320.0,
+        360.0
+      ],
+      "flags": {},
+      "order": 16,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 17
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": []
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "PreviewImage"
+      },
+      "title": "预览：基础图",
+      "widgets_values": [],
+      "widgets_values_named": {}
+    },
+    {
+      "id": 18,
+      "type": "LatentUpscale",
+      "pos": [
+        1740.0,
+        60.0
+      ],
+      "size": [
+        340.0,
+        150.0
+      ],
+      "flags": {},
+      "order": 17,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 18
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            22
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LatentUpscale"
+      },
+      "title": "Latent 放大 ×1.5",
+      "widgets_values": [
+        "bislerp",
+        1536,
+        1824,
+        "disabled"
+      ],
+      "widgets_values_named": {
+        "upscale_method": "bislerp",
+        "width": 1536,
+        "height": 1824,
+        "crop": "disabled"
+      }
+    },
+    {
+      "id": 19,
+      "type": "KSampler",
+      "pos": [
+        1740.0,
+        244.0
+      ],
+      "size": [
+        360.0,
+        330.0
+      ],
+      "flags": {},
+      "order": 18,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 19
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 20
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 21
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 22
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            23
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "KSampler"
+      },
+      "title": "二次采样（denoise 0.45）",
+      "widgets_values": [
+        20260215,
+        "randomize",
+        14,
+        1.0,
+        "er_sde",
+        "simple",
+        0.45
+      ],
+      "widgets_values_named": {
+        "seed": 20260215,
+        "control_after_generate": "randomize",
+        "steps": 14,
+        "cfg": 1.0,
+        "sampler_name": "er_sde",
+        "scheduler": "simple",
+        "denoise": 0.45
+      }
+    },
+    {
+      "id": 20,
+      "type": "VAEDecode",
+      "pos": [
+        1740.0,
+        608.0
+      ],
+      "size": [
+        320.0,
+        60.0
+      ],
+      "flags": {},
+      "order": 19,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 23
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 24
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            25,
+            26
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VAEDecode"
+      },
+      "title": "解码（高清）",
+      "widgets_values": [],
+      "widgets_values_named": {}
+    },
+    {
+      "id": 21,
+      "type": "PreviewImage",
+      "pos": [
+        1740.0,
+        702.0
+      ],
+      "size": [
+        320.0,
+        360.0
+      ],
+      "flags": {},
+      "order": 20,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 25
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": []
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "PreviewImage"
+      },
+      "title": "预览：高清",
+      "widgets_values": [],
+      "widgets_values_named": {}
+    },
+    {
+      "id": 22,
+      "type": "SaveImage",
+      "pos": [
+        60.0,
+        60.0
+      ],
+      "size": [
+        360.0,
+        480.0
+      ],
+      "flags": {},
+      "order": 21,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 26
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": []
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SaveImage"
+      },
+      "title": "保存",
+      "widgets_values": [
+        "AnimaNSFW/panel"
+      ],
+      "widgets_values_named": {
+        "filename_prefix": "AnimaNSFW/panel"
+      }
+    }
+  ],
+  "links": [
+    [
+      1,
+      2,
+      0,
+      5,
+      0,
+      "MODEL"
+    ],
+    [
+      2,
+      3,
+      0,
+      6,
+      0,
+      "CLIP"
+    ],
+    [
+      3,
+      5,
+      0,
+      6,
+      0,
+      "MODEL"
+    ],
+    [
+      4,
+      6,
+      0,
+      7,
+      0,
+      "MODEL"
+    ],
+    [
+      5,
+      3,
+      0,
+      10,
+      0,
+      "CLIP"
+    ],
+    [
+      6,
+      3,
+      0,
+      11,
+      0,
+      "CLIP"
+    ],
+    [
+      7,
+      8,
+      0,
+      10,
+      0,
+      "STRING"
+    ],
+    [
+      8,
+      9,
+      0,
+      11,
+      0,
+      "STRING"
+    ],
+    [
+      9,
+      12,
+      0,
+      14,
+      0,
+      "INT"
+    ],
+    [
+      10,
+      13,
+      0,
+      14,
+      1,
+      "INT"
+    ],
+    [
+      11,
+      7,
+      0,
+      15,
+      0,
+      "MODEL"
+    ],
+    [
+      12,
+      10,
+      0,
+      15,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      13,
+      11,
+      0,
+      15,
+      2,
+      "CONDITIONING"
+    ],
+    [
+      14,
+      14,
+      0,
+      15,
+      3,
+      "LATENT"
+    ],
+    [
+      15,
+      15,
+      0,
+      16,
+      0,
+      "LATENT"
+    ],
+    [
+      16,
+      4,
+      0,
+      16,
+      1,
+      "VAE"
+    ],
+    [
+      17,
+      16,
+      0,
+      17,
+      0,
+      "IMAGE"
+    ],
+    [
+      18,
+      15,
+      0,
+      18,
+      0,
+      "LATENT"
+    ],
+    [
+      19,
+      7,
+      0,
+      19,
+      0,
+      "MODEL"
+    ],
+    [
+      20,
+      10,
+      0,
+      19,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      21,
+      11,
+      0,
+      19,
+      2,
+      "CONDITIONING"
+    ],
+    [
+      22,
+      18,
+      0,
+      19,
+      3,
+      "LATENT"
+    ],
+    [
+      23,
+      19,
+      0,
+      20,
+      0,
+      "LATENT"
+    ],
+    [
+      24,
+      4,
+      0,
+      20,
+      1,
+      "VAE"
+    ],
+    [
+      25,
+      20,
+      0,
+      21,
+      0,
+      "IMAGE"
+    ],
+    [
+      26,
+      20,
+      0,
+      22,
+      0,
+      "IMAGE"
+    ]
+  ],
+  "groups": [
+    {
+      "id": 1,
+      "title": "01 模型与基础设置",
+      "bounding": [
+        40,
+        20,
+        420,
+        1144.0
+      ],
+      "color": "#432",
+      "flags": {}
+    },
+    {
+      "id": 2,
+      "title": "02 提示词（NSFW 面板）",
+      "bounding": [
+        600,
+        20,
+        420,
+        1720.0
+      ],
+      "color": "#234",
+      "flags": {}
+    },
+    {
+      "id": 3,
+      "title": "03 采样",
+      "bounding": [
+        1160,
+        20,
+        420,
+        1214.0
+      ],
+      "color": "#243",
+      "flags": {}
+    },
+    {
+      "id": 4,
+      "title": "04 二次放大",
+      "bounding": [
+        1720,
+        20,
+        420,
+        1066.0
+      ],
+      "color": "#342",
+      "flags": {}
+    },
+    {
+      "id": 5,
+      "title": "05 输出",
+      "bounding": [
+        40,
+        20,
+        420,
+        544.0
+      ],
+      "color": "#333",
+      "flags": {}
+    }
+  ],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.5,
+      "offset": [
+        20,
+        30
+      ]
+    }
+  },
+  "version": 0.4
+}

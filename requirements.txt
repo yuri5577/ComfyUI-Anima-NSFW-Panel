@@ -1,0 +1,13 @@
+# 本包没有额外依赖。
+#
+# 使用的库全部由 ComfyUI 自带，无需 pip 安装：
+#   torch        —— 调制引导的张量运算
+#   safetensors  —— 读取 pooled_text_proj 适配器
+#   aiohttp      —— /anima_nsfw/* 接口（ComfyUI 自带 server 依赖）
+#
+# 环境要求：ComfyUI >= 0.3（实测 0.39.0 / Python 3.12）
+#
+# 可选：调制引导需要用户手动下载适配器（约 12 MB），本包不自动联网下载：
+#   pooled_text_proj-0611.safetensors
+#   -> ComfyUI/models/model_patches/
+#   https://github.com/sorryhyun/ComfyUI-Spectrum-KSampler/releases/download/0605/pooled_text_proj-0611.safetensors

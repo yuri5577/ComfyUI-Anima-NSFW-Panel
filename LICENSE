@@ -1,0 +1,38 @@
+MIT License
+
+Copyright (c) 2026 ComfyUI-Anima-NSFW-Panel contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+第三方说明 / Third-party notices
+-------------------------------
+
+1. 调制引导（Modulation Guidance）算法来自
+   Starodubcev et al., "Rethinking Global Text Conditioning in Diffusion
+   Transformers" (ICLR 2026)。Anima 侧实现与参数（profile / 分层调度）参考：
+     * https://github.com/sorryhyun/anima_lora          (MIT)
+     * https://github.com/sorryhyun/ComfyUI-Spectrum-KSampler (MIT)
+   本包为独立的最小重写，未复制其源代码文件，函数名与 wrapper key 均加
+   `animansfw` 前缀以避免冲突。适配器权重 `pooled_text_proj-*.safetensors`
+   由上述项目发布，本包不再分发，请从作者 Release 页面下载。
+2. NSFW 标签中文译名与 → anima-weaver 项目的标签表做过对齐校对。
+3. 本包只做提示词组织与采样引导，不包含任何图片数据。
+   请遵守你所在地区的法律与所用模型的许可条款。

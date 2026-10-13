@@ -1,0 +1,566 @@
+{
+ "1": {
+  "class_type": "UNETLoader",
+  "inputs": {
+   "unet_name": "anima_baseV10.safetensors",
+   "weight_dtype": "default"
+  },
+  "_meta": {
+   "title": "① Anima 主模型"
+  }
+ },
+ "2": {
+  "class_type": "CLIPLoader",
+  "inputs": {
+   "clip_name": "qwen_3_06b_base.safetensors",
+   "type": "stable_diffusion",
+   "device": "default"
+  },
+  "_meta": {
+   "title": "② 文本编码器（Qwen3 0.6B）"
+  }
+ },
+ "3": {
+  "class_type": "VAELoader",
+  "inputs": {
+   "vae_name": "qwen_image_vae.safetensors"
+  },
+  "_meta": {
+   "title": "③ VAE"
+  }
+ },
+ "4": {
+  "class_type": "LoraLoaderModelOnly",
+  "inputs": {
+   "model": [
+    "1",
+    0
+   ],
+   "lora_name": "Anima lora\\anima-turbo-lora-v0.2.safetensors",
+   "strength_model": 1.0
+  },
+  "_meta": {
+   "title": "④ Turbo LoRA（12 步 / CFG 1）"
+  }
+ },
+ "5": {
+  "class_type": "ModelSamplingAuraFlow",
+  "inputs": {
+   "model": [
+    "4",
+    0
+   ],
+   "shift": 3.0,
+   "sampling": "flow"
+  },
+  "_meta": {
+   "title": "⑤ AuraFlow 采样偏移"
+  }
+ },
+ "10": {
+  "class_type": "AnimaNsfwPromptBuilder",
+  "inputs": {
+   "tags": "1girl, solo, best quality",
+   "intensity": "hard",
+   "quality_preset": "turbo（Turbo LoRA 12 步）",
+   "caption_enabled": true,
+   "caption_seed": 0,
+   "sort_tags": true,
+   "dedupe_tags": true,
+   "mode": "NSFW（不限）",
+   "outfit_preset": "",
+   "pose_preset": "",
+   "caption_text": "",
+   "extra_front": "",
+   "extra_tail": "",
+   "seed_mode": "递增 +1",
+   "seed": 1234
+  },
+  "_meta": {
+   "title": "🎬 剧情面板（点「📖 剧情」选故事线 / 主角 / 某一拍）"
+  }
+ },
+ "11": {
+  "class_type": "AnimaNsfwNegativeBuilder",
+  "inputs": {
+   "base_enabled": true,
+   "手部修复": true,
+   "面部修复": true,
+   "人体结构": true,
+   "NSFW安全": false,
+   "画面干净": true,
+   "防伪影": true,
+   "extra_text": "",
+   "mode": "NSFW（不限）"
+  },
+  "_meta": {
+   "title": "🚫 负面构建器"
+  }
+ },
+ "12": {
+  "class_type": "CLIPTextEncode",
+  "inputs": {
+   "text": [
+    "10",
+    0
+   ],
+   "clip": [
+    "2",
+    0
+   ]
+  },
+  "_meta": {
+   "title": "正面编码"
+  }
+ },
+ "13": {
+  "class_type": "CLIPTextEncode",
+  "inputs": {
+   "text": [
+    "11",
+    0
+   ],
+   "clip": [
+    "2",
+    0
+   ]
+  },
+  "_meta": {
+   "title": "负面编码"
+  }
+ },
+ "14": {
+  "class_type": "AnimaNsfwModGuidance",
+  "inputs": {
+   "model": [
+    "5",
+    0
+   ],
+   "clip": [
+    "2",
+    0
+   ],
+   "adapter": "pooled_text_proj-0611.safetensors",
+   "profile": "light_w1.5（先试这个）",
+   "quality_tags": "absurdres, masterpiece, score_9",
+   "quality_neg": "worst quality, low quality, score_1",
+   "base_prompt": "1girl, solo, best quality, absurdres",
+   "enabled": false,
+   "w": 3.0,
+   "start_layer": 8,
+   "end_layer": 27,
+   "taper": 0,
+   "taper_scale": 0.25,
+   "final_w": 0.0
+  },
+  "_meta": {
+   "title": "⑥ 调制引导（默认关；开了画面更精致但可能偏色）"
+  }
+ },
+ "15": {
+  "class_type": "EmptyLatentImage",
+  "inputs": {
+   "width": 1024,
+   "height": 1024,
+   "batch_size": 1
+  },
+  "_meta": {
+   "title": "⑦ 基础分辨率 1024×1024"
+  }
+ },
+ "16": {
+  "class_type": "KSampler",
+  "inputs": {
+   "model": [
+    "14",
+    0
+   ],
+   "positive": [
+    "12",
+    0
+   ],
+   "negative": [
+    "13",
+    0
+   ],
+   "latent_image": [
+    "15",
+    0
+   ],
+   "seed": 1234,
+   "steps": 12,
+   "cfg": 1.0,
+   "sampler_name": "er_sde",
+   "scheduler": "simple",
+   "denoise": 1.0
+  },
+  "_meta": {
+   "title": "⑧ 基础采样（12 步 / CFG 1）"
+  }
+ },
+ "17": {
+  "class_type": "LatentUpscaleBy",
+  "inputs": {
+   "samples": [
+    "16",
+    0
+   ],
+   "upscale_method": "bislerp",
+   "scale_by": 1.5
+  },
+  "_meta": {
+   "title": "⑨ 潜空间放大 1.5× → 1536²"
+  }
+ },
+ "18": {
+  "class_type": "KSampler",
+  "inputs": {
+   "model": [
+    "14",
+    0
+   ],
+   "positive": [
+    "12",
+    0
+   ],
+   "negative": [
+    "13",
+    0
+   ],
+   "latent_image": [
+    "17",
+    0
+   ],
+   "seed": 1234,
+   "steps": 8,
+   "cfg": 1.0,
+   "sampler_name": "er_sde",
+   "scheduler": "simple",
+   "denoise": 0.45
+  },
+  "_meta": {
+   "title": "⑩ 高清修复二次采样（denoise 0.45）"
+  }
+ },
+ "19": {
+  "class_type": "VAEDecode",
+  "inputs": {
+   "samples": [
+    "18",
+    0
+   ],
+   "vae": [
+    "3",
+    0
+   ]
+  },
+  "_meta": {
+   "title": "解码 → 1536×1536"
+  }
+ },
+ "20": {
+  "class_type": "UltralyticsDetectorProvider",
+  "inputs": {
+   "model_name": "bbox/face_yolov8m.pt"
+  },
+  "_meta": {
+   "title": "检测器：脸"
+  }
+ },
+ "21": {
+  "class_type": "UltralyticsDetectorProvider",
+  "inputs": {
+   "model_name": "bbox/hand_yolov8s.pt"
+  },
+  "_meta": {
+   "title": "检测器：手"
+  }
+ },
+ "22": {
+  "class_type": "UltralyticsDetectorProvider",
+  "inputs": {
+   "model_name": "segm/person_yolov8m-seg.pt"
+  },
+  "_meta": {
+   "title": "检测器：人体（分割）"
+  }
+ },
+ "23": {
+  "class_type": "SAMLoader",
+  "inputs": {
+   "model_name": "sam_vit_b_01ec64.pth",
+   "device_mode": "AUTO"
+  },
+  "_meta": {
+   "title": "SAM 分割模型"
+  }
+ },
+ "24": {
+  "class_type": "FaceDetailer",
+  "inputs": {
+   "image": [
+    "19",
+    0
+   ],
+   "model": [
+    "14",
+    0
+   ],
+   "clip": [
+    "2",
+    0
+   ],
+   "vae": [
+    "3",
+    0
+   ],
+   "positive": [
+    "12",
+    0
+   ],
+   "negative": [
+    "13",
+    0
+   ],
+   "bbox_detector": [
+    "20",
+    0
+   ],
+   "sam_model_opt": [
+    "23",
+    0
+   ],
+   "guide_size": 512,
+   "guide_size_for": true,
+   "max_size": 1024,
+   "seed": 1234,
+   "steps": 12,
+   "cfg": 1.0,
+   "sampler_name": "er_sde",
+   "scheduler": "simple",
+   "denoise": 0.45,
+   "feather": 5,
+   "noise_mask": true,
+   "force_inpaint": true,
+   "bbox_threshold": 0.5,
+   "bbox_dilation": 10,
+   "bbox_crop_factor": 3.0,
+   "sam_detection_hint": "center-1",
+   "sam_dilation": 0,
+   "sam_threshold": 0.93,
+   "sam_bbox_expansion": 0,
+   "sam_mask_hint_threshold": 0.7,
+   "sam_mask_hint_use_negative": "False",
+   "drop_size": 10,
+   "wildcard": "",
+   "cycle": 1
+  },
+  "_meta": {
+   "title": "⑪ 修脸：face_yolov8m + SAM"
+  }
+ },
+ "25": {
+  "class_type": "FaceDetailer",
+  "inputs": {
+   "image": [
+    "24",
+    0
+   ],
+   "model": [
+    "14",
+    0
+   ],
+   "clip": [
+    "2",
+    0
+   ],
+   "vae": [
+    "3",
+    0
+   ],
+   "positive": [
+    "12",
+    0
+   ],
+   "negative": [
+    "13",
+    0
+   ],
+   "bbox_detector": [
+    "21",
+    0
+   ],
+   "sam_model_opt": [
+    "23",
+    0
+   ],
+   "guide_size": 384,
+   "guide_size_for": true,
+   "max_size": 1024,
+   "seed": 1234,
+   "steps": 12,
+   "cfg": 1.0,
+   "sampler_name": "er_sde",
+   "scheduler": "simple",
+   "denoise": 0.5,
+   "feather": 6,
+   "noise_mask": true,
+   "force_inpaint": true,
+   "bbox_threshold": 0.4,
+   "bbox_dilation": 12,
+   "bbox_crop_factor": 3.0,
+   "sam_detection_hint": "center-1",
+   "sam_dilation": 0,
+   "sam_threshold": 0.93,
+   "sam_bbox_expansion": 0,
+   "sam_mask_hint_threshold": 0.7,
+   "sam_mask_hint_use_negative": "False",
+   "drop_size": 10,
+   "wildcard": "",
+   "cycle": 1
+  },
+  "_meta": {
+   "title": "⑫ 修手（手脚崩坏）：hand_yolov8s + SAM"
+  }
+ },
+ "26": {
+  "class_type": "FaceDetailer",
+  "inputs": {
+   "image": [
+    "25",
+    0
+   ],
+   "model": [
+    "14",
+    0
+   ],
+   "clip": [
+    "2",
+    0
+   ],
+   "vae": [
+    "3",
+    0
+   ],
+   "positive": [
+    "12",
+    0
+   ],
+   "negative": [
+    "13",
+    0
+   ],
+   "bbox_detector": [
+    "22",
+    0
+   ],
+   "sam_model_opt": [
+    "23",
+    0
+   ],
+   "guide_size": 768,
+   "guide_size_for": true,
+   "max_size": 1536,
+   "seed": 1234,
+   "steps": 10,
+   "cfg": 1.0,
+   "sampler_name": "er_sde",
+   "scheduler": "simple",
+   "denoise": 0.35,
+   "feather": 8,
+   "noise_mask": true,
+   "force_inpaint": true,
+   "bbox_threshold": 0.5,
+   "bbox_dilation": 8,
+   "bbox_crop_factor": 2.0,
+   "sam_detection_hint": "center-1",
+   "sam_dilation": 0,
+   "sam_threshold": 0.93,
+   "sam_bbox_expansion": 0,
+   "sam_mask_hint_threshold": 0.7,
+   "sam_mask_hint_use_negative": "False",
+   "drop_size": 10,
+   "wildcard": "",
+   "cycle": 1
+  },
+  "_meta": {
+   "title": "⑬ 修人体（结构崩坏）：person 分割 + SAM"
+  }
+ },
+ "27": {
+  "class_type": "UpscaleModelLoader",
+  "inputs": {
+   "model_name": "RealESRGAN_x4plus_anime_6B.pth"
+  },
+  "_meta": {
+   "title": "放大模型 4× anime"
+  }
+ },
+ "28": {
+  "class_type": "ImageUpscaleWithModel",
+  "inputs": {
+   "upscale_model": [
+    "27",
+    0
+   ],
+   "image": [
+    "26",
+    0
+   ]
+  },
+  "_meta": {
+   "title": "⑭ 4× 放大 → 6144×6144"
+  }
+ },
+ "29": {
+  "class_type": "ImageScaleBy",
+  "inputs": {
+   "image": [
+    "28",
+    0
+   ],
+   "upscale_method": "lanczos",
+   "scale_by": 0.55
+  },
+  "_meta": {
+   "title": "⑮ 缩到 0.55（4608→2534，省硬盘）"
+  }
+ },
+ "30": {
+  "class_type": "SaveImage",
+  "inputs": {
+   "images": [
+    "29",
+    0
+   ],
+   "filename_prefix": "AnimaStory/story"
+  },
+  "_meta": {
+   "title": "💾 保存：output/AnimaStory/"
+  }
+ },
+ "31": {
+  "class_type": "ImageGridComposite2x2",
+  "inputs": {
+   "image1": [
+    "29",
+    0
+   ],
+   "image2": [
+    "29",
+    0
+   ],
+   "image3": [
+    "29",
+    0
+   ],
+   "image4": [
+    "29",
+    0
+   ]
+  },
+  "_meta": {
+   "title": "⑯ 四格拼图（同一张先占位）"
+  }
+ }
+}

@@ -1,0 +1,319 @@
+# -*- coding: utf-8 -*-
+"""对「解压出来的副本」做最终验证：严格模拟新用户的环境。
+
+把解压目录临时插入 sys.path 最前面，确保导入的是解压副本而不是开发目录，
+然后检查节点、接口、标签库、示例工作流、前端 JS 语法。
+"""
+import importlib
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import traceback
+
+# --- 自定位（脚本在 <包>/tools/ 下）---
+import os as _os
+import sys as _sys
+TOOLS_DIR = _os.path.dirname(_os.path.abspath(__file__))
+PKG_ROOT = _os.path.dirname(TOOLS_DIR)
+COMFY_ROOT = _os.environ.get("COMFY_ROOT") or _os.path.dirname(
+    _os.path.dirname(_os.path.dirname(PKG_ROOT)))
+PY_EXE = _os.environ.get("PY_EXE") or _sys.executable
+
+
+sys.stdout.reconfigure(encoding="utf-8")
+VERIFY = os.environ.get("VERIFY_DIR") or PKG_ROOT
+COMFY = r"D:\ComfyUI-aki-v2\ComfyUI"
+PKG_DIR = os.path.join(VERIFY, "ComfyUI-Anima-NSFW-Panel")
+PKG_NAME = "ComfyUI-Anima-NSFW-Panel"
+
+ok = True
+
+
+def check(label, cond, extra=""):
+    global ok
+    print(f"{'OK  ' if cond else 'ERR '} {label}{('  ' + str(extra)) if extra else ''}")
+    if not cond:
+        ok = False
+
+
+# 1. 只把解压目录放到 sys.path 最前（custom_nodes 不加入）
+sys.path.insert(0, COMFY)
+sys.path.insert(0, VERIFY)
+
+check("解压副本存在", os.path.isfile(os.path.join(PKG_DIR, "__init__.py")))
+
+# 2. 导入
+mod = None
+try:
+    mod = importlib.import_module(PKG_NAME)
+    check("import 成功", True)
+    check("导入来源是解压副本", os.path.abspath(mod.__file__).startswith(os.path.abspath(VERIFY)),
+          mod.__file__)
+except Exception:
+    traceback.print_exc()
+    check("import 成功", False)
+
+if mod is not None:
+    nodes = importlib.import_module(PKG_NAME + ".py.nodes")
+    expect = {"AnimaNsfwPromptBuilder", "AnimaNsfwNegativeBuilder",
+              "AnimaNsfwModGuidance", "AnimaNsfwCaptionOnly"}
+    check("4 个节点齐全", set(nodes.NODE_CLASS_MAPPINGS) == expect,
+          sorted(nodes.NODE_CLASS_MAPPINGS))
+    check("中文显示名齐全", set(nodes.NODE_DISPLAY_NAME_MAPPINGS) == expect)
+    check("WEB_DIRECTORY", mod.WEB_DIRECTORY == "./web")
+
+    # 3. INPUT_TYPES 全部可构造
+    for name, cls in nodes.NODE_CLASS_MAPPINGS.items():
+        try:
+            spec = cls.INPUT_TYPES()
+            check(f"{name} INPUT_TYPES", bool(spec.get("required")))
+        except Exception as e:
+            check(f"{name} INPUT_TYPES", False, e)
+
+    # 4. 合成逻辑
+    pb = importlib.import_module(PKG_NAME + ".py.prompt_builder")
+    r = pb.compose_prompt(tags="1girl, 1boy, doggystyle, ahegao, cum",
+                          intensity="hard", quality_preset="best quality")
+    check("提示词合成", r["prompt"].startswith("best quality") and "doggystyle" in r["prompt"],
+          r["prompt"][:80])
+    n = pb.compose_negative(base_enabled=True, extras=["手部修复"])
+    check("负面合成", "worst quality" in n["prompt"] and "bad hands" in n["prompt"])
+
+    # 5. 标签库
+    tags = importlib.import_module(PKG_NAME + ".py.tags")
+    d = tags.as_dict()
+    check("标签库 11097 条 / 14 分类", len(d["tags"]) == 11097 and len(d["categories"]) == 14,
+          f'{len(d["tags"])} / {len(d["categories"])}')
+    check("每条标签都有中文", all(t.get("zh") for t in d["tags"]))
+    cop = [t for t in d["tags"] if t["c"] == "copyright"]
+    check("作品/版权标签 140 条（102 游戏 + 38 轻小说）", len(cop) == 140, len(cop))
+    check("作品标签分两个互斥组（游戏 / 轻小说）",
+          {t.get("g") for t in cop} == {"copyright_base", "light_novel_base"},
+          sorted({t.get("g") for t in cop}))
+    for want in ("blue archive", "azur lane", "kantai collection", "touhou",
+                 "sword art online", "mushoku tensei"):
+        hit = next((t for t in cop if t["t"] == want), None)
+        check(f"作品标签 {want} 可见", bool(hit), hit.get("zh") if hit else "缺失")
+    check("质量预置 5 档", len(d["quality_presets"]) == 5, list(d["quality_presets"]))
+    check("负面基线内置", len(d["negative_base"]) > 200, f'{len(d["negative_base"])} 字符')
+    check("负面分段 6 段", len(d["negative_extra"]) == 6, list(d["negative_extra"]))
+
+    # 5b. 角色库
+    cch = [t for t in d["tags"] if t["c"] == "character"]
+    check("角色库 8000 个", len(cch) == 8000, len(cch))
+    check("角色可见 6412 / 隐藏 1588",
+          sum(1 for t in cch if not t.get("hidden")) == 6412
+          and sum(1 for t in cch if t.get("hidden")) == 1588,
+          f'{sum(1 for t in cch if not t.get("hidden"))} / {sum(1 for t in cch if t.get("hidden"))}')
+    check("角色共用一个互斥组", {t.get("g") for t in cch} == {"character_base"},
+          sorted({t.get("g") for t in cch}))
+    for w, zh in (("hatsune miku", "初音未来"), ("hakurei reimu", "博丽灵梦"),
+                  ("pikachu", "皮卡丘"), ("raiden shogun", "雷电将军")):
+        t = next((x for x in cch if x["t"] == w), None)
+        check(f"角色中文名 {w}", bool(t) and t["zh"] == zh, t["zh"] if t else "缺失")
+
+    # 5c. 中文翻译覆盖率（非角色标签）
+    nonchar = [t for t in d["tags"] if t["c"] != "character"]
+    zh_ok = sum(1 for t in nonchar if any("\u4e00" <= ch <= "\u9fff" for ch in t["zh"]))
+    rate = zh_ok / max(1, len(nonchar))
+    check("非角色标签中文覆盖 > 80%", rate > 0.80, f"{rate * 100:.1f}%")
+    tr = importlib.import_module(PKG_NAME + ".py.translations")
+    check("翻译层 aqua shawl", tr.translate("aqua shawl") == "水蓝披肩", tr.translate("aqua shawl"))
+    check("翻译层 armpit cutout", tr.translate("armpit cutout") == "腋下镂空")
+    # 剧情模式
+    _story = importlib.import_module(PKG_NAME + ".py.story")
+    _sc = _story.counts()
+    check("剧情 11 条故事线 / 66 拍", _sc["arcs"] == 11 and _sc["scenes"] == 66,
+          f'{_sc["arcs"]} 线 / {_sc["scenes"]} 拍 / {_sc["cast"]} 主角')
+    check("每条故事线 6 拍", all(len(x["scenes"]) == 6 for x in _story.ARCS))
+    check("每拍都有中文台词",
+          all(s.get("dialogue") for x in _story.ARCS for s in x["scenes"]))
+    _r = _story.build_scene("onsen_ryokan", 3, "raiden")
+    check("展开某一拍带 char_lock（主角锁定）", "char_lock:raiden shogun" in _r["tags"])
+    check("展开某一拍带主角立绘标签", "purple hair" in _r["tags"])
+    check("展开某一拍带固定服装", "kimono" in _r["tags"])
+    check("标签串里没有引号（台词走 caption_text）", '"' not in _r["tags"])
+    _toks = [x.strip().lower() for x in _r["tags"].split(", ")]
+    check("展开的标签无重复", len(_toks) == len(set(_toks)))
+    check("台词单独给出", bool(_r["caption_text"]) and bool(_r["dialogue"]))
+    check("seed_hint 为递增", _r.get("seed_hint") == "递增 +1")
+    # 全库体检：不能有重复标签 / 引号 / 缺 char_lock / 缺台词
+    _bad = []
+    for _a in _story.ARCS:
+        for _s in _a["scenes"]:
+            for _k in _a["cast"]:
+                _r2 = _story.build_scene(_a["id"], _s["id"], _k)
+                _tk = [x.strip().lower() for x in _r2["tags"].split(", ")]
+                if len(_tk) != len(set(_tk)):
+                    _bad.append("dup:" + _a["id"])
+                if '"' in _r2["tags"]:
+                    _bad.append("quote:" + _a["id"])
+                if "char_lock:" not in _r2["tags"]:
+                    _bad.append("nolock:" + _a["id"])
+                if not _r2["dialogue"] or not _r2["caption_text"]:
+                    _bad.append("nodlg:" + _a["id"])
+    check("剧情全库体检（无重复/无引号/都锁主角/都有台词）", not _bad,
+          str(sorted(set(_bad))[:4]) if _bad else "OK")
+    # 每拍的数量锚点必须恰好一组
+    _anchor_bad = []
+    for _a in _story.ARCS:
+        for _s in _a["scenes"]:
+            for _k in _a["cast"]:
+                _r3 = _story.build_scene(_a["id"], _s["id"], _k)
+                _tk2 = [x.strip().lower() for x in _r3["tags"].split(", ")]
+                _cnt = [x for x in _tk2 if x in _story._COUNT_TAGS]
+                if len(_cnt) != 2 or "1girl" not in _cnt:
+                    _anchor_bad.append(f'{_a["id"]}#{_s["id"]}:{_cnt}')
+                if "2people" in _tk2:
+                    _anchor_bad.append(f'{_a["id"]}#{_s["id"]}:2people')
+    check("每拍数量锚点恰好一组（无双胞胎风险）", not _anchor_bad,
+          str(_anchor_bad[:3]) if _anchor_bad else "OK")
+    check("新增题材已收录（青梅竹马/催眠/时间停止）",
+          {"childhood_promise", "hypno_pocketwatch", "time_stop_watch"}
+          <= {x["id"] for x in _story.ARCS})
+    _tg = importlib.import_module(PKG_NAME + ".py.tags")
+    for _w in ("spiral eyes", "hypnosis", "time stop", "clock",
+               "childhood friend", "pendulum", "frozen in time"):
+        check(f"剧情标签已入正式标签库 {_w}", _w in _tg.TAG_INDEX)
+
+    # 种子控制
+    _it = importlib.import_module(PKG_NAME + ".py.nodes").AnimaNsfwPromptBuilder.INPUT_TYPES()
+    _opt = list(_it.get("optional", {}).keys())
+    check("面板有 seed_mode 控件", "seed_mode" in _opt, str(_opt[-3:]))
+    check("面板有 seed 控件", "seed" in _opt)
+    _sm = _it["optional"]["seed_mode"][0]
+    check("种子 4 种模式", len(list(_sm)) == 4, str(list(_sm)))
+    _nod = importlib.import_module(PKG_NAME + ".py.nodes")
+    check("种子模式→自动控制映射", _nod.SEED_CONTROL.get(_nod.SEED_MODE_RANDOM) == "randomize")
+    check("轻小说 38 部", d.get("light_novel_count") == 38, d.get("light_novel_count"))
+    lng = [g["id"] for g in d["copyright_groups"]]
+    check("有 light_novel 分组", "light_novel" in lng, str(lng))
+    ln = [t for t in d["tags"] if t.get("g") == "light_novel_base"]
+    check("轻小说共用独立互斥组", len(ln) == 38 and len({x["t"] for x in ln}) == 38, len(ln))
+    for w in ("sword art online", "toaru majutsu no index", "mushoku tensei"):
+        check(f"轻小说收录 {w}", any(x["t"] == w for x in ln))
+    _cj = json.load(open(os.path.join(PKG_DIR, "web", "characters.json"), encoding="utf-8"))
+    _pv = (_cj.get("meta") or {}).get("preview") or {}
+    check("角色库带立绘 URL 模板", bool(_pv.get("enabled")) and "animadex" in str(_pv.get("base")),
+          str(_pv.get("base"))[:46])
+    csx = importlib.import_module(PKG_NAME + ".py.character_store")
+    check("角色库文件随包分发", csx.meta().get("total") == 8000, csx.meta().get("total"))
+
+    pc = d["outfit_preset_count"]
+    check("服装预设 518 套 / 14 组",
+          pc["all"] == 518 and len(d["outfit_groups"]) == 14,
+          f'{pc["all"]} (手工 {pc["curated"]} + 服装库 {pc["imported"]}) / {len(d["outfit_groups"])}')
+    check("服装带预览图 430",
+          sum(1 for p in d["outfit_presets"] if p["preview"]) == 430)
+    check("姿势预设 297 个 / 8 组",
+          len(d["pose_presets"]) == 297 and len(d["pose_groups"]) == 8,
+          f'{len(d["pose_presets"])} / {len(d["pose_groups"])}')
+    check("姿势带预览图 297",
+          all(p["preview"].startswith("https://") for p in d["pose_presets"]))
+    preset_tag_set = {t["t"].lower() for t in d["tags"]}
+    missing = {t for p in d["outfit_presets"] + d["pose_presets"]
+               for t in p["tags"] if t.lower() not in preset_tag_set}
+    check("预设标签都在标签库里", not missing, sorted(missing)[:5])
+    check("锁定角色预设 17 条",
+          sum(1 for p in d["outfit_presets"] if p["lock"]) == 17)
+    bad = [p["zh"] for p in d["outfit_presets"] + d["pose_presets"]
+           if ":1." in " ".join(p["tags"])]
+    check("预设里没有权重残留", not bad, bad[:3])
+
+    # 6. 前端 JS 资源
+    js = os.path.join(PKG_DIR, "web", "anima_nsfw_panel.js")
+    check("面板 JS 存在", os.path.isfile(js))
+    node = shutil.which("node")
+    if not node:
+        node = r"C:\Users\65482\.dsh\dsh-runtimes\dsh-primary-runtime\dependencies\node\bin\node.exe"
+    if os.path.isfile(node):
+        tmp = os.path.join(tempfile.gettempdir(), "verify_panel.mjs")
+        shutil.copyfile(js, tmp)
+        p = subprocess.run([node, "--check", tmp], capture_output=True, text=True)
+        check("面板 JS 语法", p.returncode == 0, p.stderr.strip()[:200])
+    else:
+        print("SKIP  未找到 node，跳过 JS 语法检查")
+
+    # 6b. 自定义库模块
+    cs = importlib.import_module(PKG_NAME + ".py.custom_store")
+    check("custom_store 可导入", hasattr(cs, "upsert") and hasattr(cs, "merge_import"))
+    check("自定义库四类", tuple(cs.KINDS) == ("trigger", "character", "outfit", "pose"),
+          cs.KINDS)
+    check("自定义库有配额限制", cs.MAX_ENTRIES > 0 and cs.MAX_TAGS > 0,
+          f"{cs.MAX_ENTRIES} 条 / {cs.MAX_TAGS} 标签")
+    check("自定义库文件不随包分发（用户数据）",
+          not os.path.isfile(os.path.join(PKG_DIR, "custom_library.json")))
+
+# 6b2. SFW 双模式自测
+_py = os.environ.get("PY_EXE") or PY_EXE
+_sfw_test = os.path.join(TOOLS_DIR, "animansfw_sfw_selftest.py")
+if os.path.isfile(_sfw_test):
+    p = subprocess.run([_py, _sfw_test], capture_output=True, text=True,
+                       encoding="utf-8", errors="replace")
+    tail = [l for l in (p.stdout or "").splitlines() if l.startswith("RESULT")]
+    check("SFW 双模式自测", p.returncode == 0, (tail[-1] if tail else "")[:60])
+    if p.returncode != 0:
+        for l in (p.stdout or "").splitlines():
+            if l.startswith("FAIL"):
+                print("        " + l)
+else:
+    print("SKIP  缺少 SFW 自测脚本，跳过")
+
+# 6c. 离线冒烟测试（现代 + 低版本前端），不需要启动 ComfyUI
+SMOKE = os.path.join(TOOLS_DIR, "animansfw_panel_smoke.mjs")
+FIXTURE = os.path.join(TOOLS_DIR, "tags_fixture.json")
+_py = os.environ.get("PY_EXE") or PY_EXE
+_dshpy = _py
+if os.path.isfile(FIXTURE) and os.path.isfile(SMOKE):
+    subprocess.run([_dshpy, os.path.join(os.path.dirname(SMOKE), "animansfw_make_fixture.py")],
+                   capture_output=True, text=True)
+    for mode, label in (([], "现代前端"), (["--legacy"], "低版本前端"),
+                        (["--oldfe"], "老前端契约 1.12.x")):
+        p = subprocess.run([node, SMOKE, *mode, js], capture_output=True, text=True,
+                           encoding="utf-8", errors="replace")
+        tail = (p.stdout or "").strip().splitlines()[-1:] or [""]
+        check(f"离线冒烟测试（{label}）", p.returncode == 0, tail[0][:70])
+        if p.returncode != 0:
+            errs = [l for l in (p.stdout or "").splitlines() if l.startswith("ERR")]
+            for e in errs[:6]:
+                print("        " + e)
+else:
+    print("SKIP  缺少冒烟测试或 fixture，跳过")
+
+# 7. 示例工作流
+wf = os.path.join(PKG_DIR, "workflows", "Anima-NSFW面板-调制引导.json")
+try:
+    data = json.load(open(wf, encoding="utf-8"))
+    types = {n["type"] for n in data["nodes"]}
+    check("示例工作流可解析", True, f'{len(data["nodes"])} 节点 / {len(data["links"])} 连线')
+    check("示例工作流含新面板节点", "AnimaNsfwPromptBuilder" in types and
+          "AnimaNsfwModGuidance" in types and "AnimaNsfwNegativeBuilder" in types)
+    check("示例工作流含模型与 LoRA", "UNETLoader" in types and "LoraLoaderModelOnly" in types)
+except Exception as e:
+    check("示例工作流", False, e)
+
+# 8. 压缩包本体里不能有 __pycache__/.pyc（导入会就地生成，所以查 zip 而不是查目录）
+zip_path = r"C:\Users\65482\Documents\deepseek-harness\default-workspace\_dist\ComfyUI-Anima-NSFW-Panel-v1.0.0.zip"
+if os.path.isfile(zip_path):
+    import zipfile
+
+    with zipfile.ZipFile(zip_path) as z:
+        bad = [n for n in z.namelist() if "__pycache__" in n or n.endswith(".pyc")]
+    check("压缩包本体无 __pycache__/.pyc", not bad, f"entries={len(z.namelist())}")
+else:
+    print("SKIP  未找到 zip，跳过包体检查")
+
+# 9. 文档齐全
+for name in ("README.md", "安装说明.md", "CHANGELOG.md", "LICENSE",
+             "pyproject.toml", "requirements.txt", "00-先读我-安装说明.md"):
+    check(f"文档 {name}", os.path.isfile(os.path.join(PKG_DIR, name)))
+
+# 10. 不该出现的文件
+check("没有 nsfw_tags.json（体积过大，前端走 API）",
+      not os.path.isfile(os.path.join(PKG_DIR, "web", "nsfw_tags.json")))
+
+print("\nRESULT:", "ALL OK" if ok else "FAIL")
+sys.exit(0 if ok else 1)

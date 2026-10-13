@@ -1,0 +1,22 @@
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.venv/
+venv/
+.idea/
+.vscode/
+*.log
+.DS_Store
+Thumbs.db
+
+# 用户自己的自定义库（触发词/角色/服装/姿势）——不要提交到公共仓库
+custom_library.json
+custom_library.json.broken
+custom_library.json.tmp
+
+# 开发期备份
+*.bak
+*.bak_*
+__smoke_shadow__.mjs
+__panel_under_test__.mjs
