@@ -1175,6 +1175,32 @@ function buildPanel(node, data) {
     paintMode();
     header.appendChild(modeBtn);
 
+    // 🎲 随机服装：放在头部，任何视图都能点。
+    //    原来只在服装视图的工具栏里（头部下方），扫一眼容易漏掉。
+    const diceBtn = el("button", {
+        padding: "6px 12px", borderRadius: "6px", cursor: "pointer", fontSize: "12px",
+        border: `1px solid ${THEME.outfit}`, background: "rgba(232,121,249,0.16)",
+        color: THEME.outfit, fontWeight: "600", whiteSpace: "nowrap",
+    }, {
+        textContent: "🎲 随机服装",
+        title: "随机抽一套服装。"
+            + "在别的视图点它会自动切到服装视图并按当前筛选抽；"
+            + "想限定范围就先点分组（例如「封碧蓝·皇家」）再点它。"
+            + "要不要补配饰在服装视图顶部那条勾选。",
+    });
+    diceBtn.onclick = () => {
+        if (view !== "outfits") {
+            // 从别的视图过来：先回到「全部」筛选，避免上次留下的窄筛选
+            // 让人以为"抽不出来"
+            outfitSrc = "all";
+            outfitGroup = "all";
+            outfitQuery = "";
+            setView("outfits");
+        }
+        randomOutfit();     // 内部已负责重画网格 + 把卡片滚进视野
+    };
+    header.appendChild(diceBtn);
+
     const outfitBtn = el("button", {
         padding: "6px 12px", borderRadius: "6px", cursor: "pointer", fontSize: "12px",
         border: `1px solid ${THEME.accentLine}`, background: THEME.accentSoft,
@@ -2037,6 +2063,15 @@ function buildPanel(node, data) {
             }
         } catch (e) { /* 忽略 */ }
 
+        // 重画网格：让「当前套用」标记落到正确的卡片上，并滚进视野
+        if (view === "outfits") {
+            renderGrid();
+            setTimeout(() => {
+                const cur = grid.querySelector('button[data-preset-current]');
+                if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: "nearest" });
+            }, 40);
+        }
+
         const g = (STATE.data?.outfit_groups || []).find((x) => x.id === pick.g);
         toast(`🎲 ${pick.zh}${g ? `（${g.zh}）` : ""}`
             + (added.length ? ` ＋ ${added.join("、")}` : "")
@@ -2483,8 +2518,23 @@ function buildPanel(node, data) {
         }, { textContent: `${workLabel(c.c)} · 热度 ${c.p}` }));
         card.appendChild(info);
 
+        // ⚠️ 性别数据存疑时**明说**，不要装作没问题。
+        // 背景：Danbooru 上 `mistilteinn (closers)` 有 144 帖标 1boy，但它的 wiki
+        // 写的是「Lancer class playable character」—— 那是 Closers 的女性角色米斯丁，
+        // 标记是错的。所以拿不准的角色在卡片上标出来，让用户自己判断。
+        if (c.gender === "uncertain") {
+            info.appendChild(el("div", {
+                fontSize: "9.5px", color: THEME.warn || "#fbbf24", lineHeight: "1.3",
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+            }, { textContent: "⚠ 性别标注不可靠" }));
+        }
+
         card.title = `${c.z || en} (${en})\n${workLabel(c.c)}\n`
-            + `${(c.t || []).length} 个推荐标签\n${(c.t || []).join(", ")}`;
+            + `${(c.t || []).length} 个推荐标签\n${(c.t || []).join(", ")}`
+            + (c.gender === "uncertain"
+                ? `\n\n⚠ 这个角色的性别标注不可靠，建议自己确认后再用「补齐推荐标签」`
+                  + (c.gender_note ? `\n原因：${c.gender_note}` : "")
+                : "");
         card.onclick = () => {
             if (!selected.has(en.toLowerCase())) select(en);
             else {
@@ -2917,11 +2967,31 @@ function buildPanel(node, data) {
                 color: "#0d1024", fontWeight: "600",
             }, { textContent: "补齐推荐标签" });
             b.onclick = () => {
-                for (const t of c.t || []) {
-                    if (!selected.has(t.toLowerCase())) select(t);
+                // ⚠️ 先把用户已有的**性别锚点**清掉，再用角色自己的。
+                //
+                // `1girl` / `1boy` / 2girls / multiple boys … 全在互斥组 `count`，
+                // 只保留最后一个。面板默认标签就带 `1girl`，如果不清，就得看
+                // 「角色名 vs 1girl」谁排在后面 —— 顺序一变结果就变（实测踩过）。
+                //
+                // 清掉之后由角色自己的锚点唯一决定，与顺序无关。
+                const COUNT = "count";
+                for (const t of [...order]) {
+                    const inf = tagInfo(t);
+                    if (inf && inf.g === COUNT) {
+                        selected.delete(t.toLowerCase());
+                        const i = order.indexOf(t);
+                        if (i >= 0) order.splice(i, 1);
+                    }
+                }
+                for (const t of (c.t || [])) {
+                    // 角色带来的性别锚点打 char_anchor: 标记（后端据此判定，并剥掉）
+                    const info = tagInfo(t);
+                    const tagged = (info && info.g === COUNT) ? `char_anchor:${t}` : t;
+                    if (!selected.has(tagged.toLowerCase())) select(tagged);
                 }
                 sync();
-                toast(`已补上「${c.z || c.n}」的推荐标签`);
+                toast(`已补上「${c.z || c.n}」的推荐标签`
+                    + `（性别锚点按角色自带，已清掉冲突项）`);
             };
             box.appendChild(b);
             grid.appendChild(box);
@@ -3310,6 +3380,8 @@ function buildPanel(node, data) {
         card.appendChild(body);
         card.title = `${p.zh} (${p.en})\n${(p.tags || []).join(", ")}`;
         card.onclick = () => applyPresetOutfit(p);
+        // 标记「当前套用的那一套」，方便滚动定位 / 视觉强调
+        if (currentPreset && currentPreset.id === p.id) card.dataset.presetCurrent = "1";
         return card;
     }
 

@@ -122,7 +122,7 @@ if mod is not None:
     # 5. 标签库
     tags = importlib.import_module(PKG_NAME + ".py.tags")
     d = tags.as_dict()
-    check("标签库 11140 条 / 14 分类", len(d["tags"]) == 11140 and len(d["categories"]) == 14,
+    check("标签库 11157 条 / 14 分类", len(d["tags"]) == 11157 and len(d["categories"]) == 14,
           f'{len(d["tags"])} / {len(d["categories"])}')
     check("每条标签都有中文", all(t.get("zh") for t in d["tags"]))
     cop = [t for t in d["tags"] if t["c"] == "copyright"]
@@ -140,10 +140,11 @@ if mod is not None:
 
     # 5b. 角色库
     cch = [t for t in d["tags"] if t["c"] == "character"]
-    check("角色库 8000 个", len(cch) == 8000, len(cch))
-    check("角色可见 6412 / 隐藏 1588",
-          sum(1 for t in cch if not t.get("hidden")) == 6412
-          and sum(1 for t in cch if t.get("hidden")) == 1588,
+    check("角色库 8017 个", len(cch) == 8017, len(cch))
+    # 可见 = 热度 >= visible_min_posts（角色库按热度过滤，不是 hidden 字段）
+    check("角色可见 6413 / 隐藏 1604",
+          sum(1 for t in cch if not t.get("hidden")) == 6413
+          and sum(1 for t in cch if t.get("hidden")) == 1604,
           f'{sum(1 for t in cch if not t.get("hidden"))} / {sum(1 for t in cch if t.get("hidden"))}')
     check("角色共用一个互斥组", {t.get("g") for t in cch} == {"character_base"},
           sorted({t.get("g") for t in cch}))
@@ -237,7 +238,13 @@ if mod is not None:
     check("角色库带立绘 URL 模板", bool(_pv.get("enabled")) and "animadex" in str(_pv.get("base")),
           str(_pv.get("base"))[:46])
     csx = importlib.import_module(PKG_NAME + ".py.character_store")
-    check("角色库文件随包分发", csx.meta().get("total") == 8000, csx.meta().get("total"))
+    check("角色库文件随包分发", csx.meta().get("total") == 8017, csx.meta().get("total"))
+    # 封印者（Closers）角色：直接查角色库文件（cch 的结构不保证有 c 字段）
+    _cl = [c for c in ((csx.load() or {}).get("chars") or []) if c.get("c") == "closers"]
+    check("新增封印者角色 21 个", len(_cl) >= 21, len(_cl))
+    check("封印者角色都有性别标注",
+          all(c.get("gender") in ("1girl", "1boy", "uncertain") for c in _cl),
+          f'{sum(1 for c in _cl if c.get("gender") == "uncertain")} 个存疑')
 
     pc = d["outfit_preset_count"]
     check("服装预设 568 套 / 23 组",

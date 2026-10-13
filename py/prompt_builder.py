@@ -53,17 +53,24 @@ def strip_weight(token: str) -> str:
 
 def normalize_token(token: str) -> str:
     token = strip_weight(token)
-    # ⚠️ 先把内部的 char_lock 前缀保护起来：它含下划线，而下面的规范化会把
-    #    下划线换成空格 —— 那样 "char_lock:asuna" 就变成 "char lock:asuna"，
-    #    锁前缀失效、角色互斥组也认不出它，最后这串垃圾文本还会进提示词，
-    #    足以把画面搞成全黑（实测踩过）。
-    had_lock = token.lower().startswith(CHAR_LOCK_PREFIX)
-    if had_lock:
-        token = token[len(CHAR_LOCK_PREFIX):]
+    # ⚠️ 先把内部标记前缀保护起来：它们含下划线，而下面的规范化会把下划线换成
+    #    空格 —— "char_lock:asuna" 会变成 "char lock:asuna"、
+    #    "char_anchor:1boy" 会变成 "char anchor:1boy"，
+    #    前缀失效、互斥组也认不出，最后这串垃圾文本还会进提示词。
+    #    实测两种都踩过（char_lock 那次导致整张全黑）。
+    _PREFIXES = (CHAR_LOCK_PREFIX, CHAR_ANCHOR_PREFIX)
+    hit = None
+    low = token.lower()
+    for pre in _PREFIXES:
+        if low.startswith(pre):
+            hit = pre
+            break
+    if hit:
+        token = token[len(hit):]
     token = token.replace("_", " ").strip().strip(",")
     token = re.sub(r"\s+", " ", token)
-    if had_lock and token:
-        token = CHAR_LOCK_PREFIX + token
+    if hit and token:
+        token = hit + token
     return token
 
 
@@ -148,6 +155,25 @@ def enforce_groups(tokens: Sequence[str]) -> Tuple[List[str], List[str]]:
     for idx, grp in group_of.items():
         last_in_group[grp] = idx
 
+    # 性别锚点：只看**带标记的**那个。
+    # ⚠️ 不要去"猜"角色的 count 标签 —— 角色名（character_base 组）和它的
+    #    `1boy`（count 组）是两个独立 token，从 `1boy` 本身看不出它是不是角色带来的。
+    #    实测那种猜法对「角色名在前、锚点在后」的顺序完全失效。
+    #    所以由前端在「补齐推荐标签」时打上 char_anchor: 前缀（见面板 JS）。
+    anchor_idx = None
+    for idx, tok in enumerate(tokens):
+        if tok.lower().startswith(CHAR_ANCHOR_PREFIX):
+            anchor_idx = idx
+            group_of[idx] = "count"
+    if anchor_idx is not None:
+        # 让这个索引成为 count 组唯一保留项
+        for idx in list(group_of):
+            if idx != anchor_idx and group_of[idx] == "count":
+                group_of[idx] = "count_overridden"
+        last_in_group["count"] = anchor_idx
+        last_in_group["count_overridden"] = anchor_idx + 1000000
+
+
     dropped = []
     kept = []
     for idx, tok in enumerate(tokens):
@@ -163,10 +189,24 @@ def enforce_groups(tokens: Sequence[str]) -> Tuple[List[str], List[str]]:
 # 它在提示词里只用于标记互斥与回溯，实际发出去前会被剥掉。
 CHAR_LOCK_PREFIX = "char_lock:"
 
+# 角色带来的**性别锚点**标记。`1girl` / `1boy` / `2girls` … 全在互斥组 `count`
+# 里只保留最后一个，而面板默认标签就有 `1girl` —— 男性角色（角色库标签是 `1boy`）
+# 会被顶掉，出图画成女孩。用这个前缀把"这个锚点来自角色"标出来。
+CHAR_ANCHOR_PREFIX = "char_anchor:"
+
 
 def strip_char_lock(tokens: Sequence[str]) -> List[str]:
-    return [t.split(":", 1)[1].strip() if t.lower().startswith(CHAR_LOCK_PREFIX) else t
-            for t in tokens]
+    """剥掉内部标记前缀（char_lock: / char_anchor:）—— 它们只用于互斥判定。"""
+    out = []
+    for t in tokens:
+        low = str(t).lower()
+        if low.startswith(CHAR_LOCK_PREFIX):
+            out.append(str(t)[len(CHAR_LOCK_PREFIX):].strip())
+        elif low.startswith(CHAR_ANCHOR_PREFIX):
+            out.append(str(t)[len(CHAR_ANCHOR_PREFIX):].strip())
+        else:
+            out.append(t)
+    return out
 
 
 def preset_tags_to_tokens(tags: Sequence[str], locked: bool = False) -> List[str]:
