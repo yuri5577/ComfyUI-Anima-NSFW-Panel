@@ -62,3 +62,20 @@ node tools/animansfw_browser_views.mjs   # 每个视图点一遍 + 剧情套用
 两个脚本都会把截图写到当前工作目录（`animansfw_panel_screenshot.png` /
 `animansfw_view_*.png`），可以直接看面板长什么样。
 
+## 5. 服装随机约束测试（离线）
+
+```bash
+node tools/animansfw_random_test.mjs
+```
+
+跑 4000 次随机配饰，统计四类违规（同槽位重复 / 重复标签 / 与预设同类冲突 /
+色系不符），并验证游戏 COS 预设的标签都在标签库里。四项都应为 0。
+
+## 6. 服装视图真浏览器测试（需要先启动 ComfyUI）
+
+```bash
+node tools/animansfw_browser_outfit.mjs
+```
+
+测分组按钮、随机 30 次（含分组内随机）、配饰开关、切换性能、搜索过滤。
+会截图到 `animansfw_outfit_view.png`。

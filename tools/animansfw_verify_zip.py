@@ -122,7 +122,7 @@ if mod is not None:
     # 5. 标签库
     tags = importlib.import_module(PKG_NAME + ".py.tags")
     d = tags.as_dict()
-    check("标签库 11097 条 / 14 分类", len(d["tags"]) == 11097 and len(d["categories"]) == 14,
+    check("标签库 11140 条 / 14 分类", len(d["tags"]) == 11140 and len(d["categories"]) == 14,
           f'{len(d["tags"])} / {len(d["categories"])}')
     check("每条标签都有中文", all(t.get("zh") for t in d["tags"]))
     cop = [t for t in d["tags"] if t["c"] == "copyright"]
@@ -240,9 +240,14 @@ if mod is not None:
     check("角色库文件随包分发", csx.meta().get("total") == 8000, csx.meta().get("total"))
 
     pc = d["outfit_preset_count"]
-    check("服装预设 518 套 / 14 组",
-          pc["all"] == 518 and len(d["outfit_groups"]) == 14,
-          f'{pc["all"]} (手工 {pc["curated"]} + 服装库 {pc["imported"]}) / {len(d["outfit_groups"])}')
+    check("服装预设 568 套 / 23 组",
+          pc["all"] == 568 and len(d["outfit_groups"]) == 23,
+          f'{pc["all"]} (手工 {pc["curated"]} + 服装库 {pc["imported"]}'
+          f' + 游戏COS {sum(1 for p in d["outfit_presets"] if p.get("src") == "game-cos")})'
+          f' / {len(d["outfit_groups"])}')
+    check("游戏 COS 服装 50 套 / 9 组",
+          sum(1 for p in d["outfit_presets"] if p.get("src") == "game-cos") >= 50
+          and len([g for g in d["outfit_groups"] if g.get("src") == "game-cos"]) == 9)
     check("服装带预览图 430",
           sum(1 for p in d["outfit_presets"] if p["preview"]) == 430)
     check("姿势预设 297 个 / 8 组",

@@ -1554,7 +1554,9 @@ def outfit_presets_as_list():
             "lvl": int(lvl),
             "lock": note.startswith("锁定"),
             "note": note,
-            "src": "import" if note.startswith("来源:") else "curated",
+            "src": ("game-cos" if "游戏COS" in note
+                    else "import" if note.startswith("来源:")
+                    else "curated"),
             "preview": OUTFIT_PREVIEWS.get(name, ""),
         })
     return out
@@ -1611,9 +1613,19 @@ except Exception:  # pragma: no cover - 缺文件时不影响手工预设
     POSE_GROUPS, POSE_PRESETS_IMPORT = [], []
     IMPORT_EXTRA_TAGS = []
 
-ALL_OUTFIT_GROUPS = list(OUTFIT_GROUPS) + [dict(g) for g in IMPORT_GROUPS]
+# 游戏 COS 服装（碧蓝航线 / 封印者 / 通用 cos），标签都查过 Danbooru 热度
+try:
+    from .game_costumes import GAME_OUTFIT_GROUPS, GAME_OUTFIT_PRESETS
+except Exception:  # pragma: no cover
+    GAME_OUTFIT_GROUPS, GAME_OUTFIT_PRESETS = [], []
+
+ALL_OUTFIT_GROUPS = (list(OUTFIT_GROUPS)
+                     + [dict(g) for g in IMPORT_GROUPS]
+                     + [dict(g) for g in GAME_OUTFIT_GROUPS])
 ALL_POSE_GROUPS = [dict(g) for g in POSE_GROUPS]
-_ALL_PRESETS = list(OUTFIT_PRESETS) + list(OUTFIT_PRESETS_IMPORT)
+_ALL_PRESETS = (list(OUTFIT_PRESETS)
+                + list(OUTFIT_PRESETS_IMPORT)
+                + list(GAME_OUTFIT_PRESETS))
 
 # 预设 -> 预览图（只有导入的预设带图；手工精选那 88 套没有图）
 OUTFIT_PREVIEWS = {item[0]: item[7] for item in OUTFIT_PRESETS_IMPORT if len(item) > 7 and item[7]}

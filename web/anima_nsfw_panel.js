@@ -344,6 +344,150 @@ function applySeedToGraph(node, mode, seed) {
 }
 
 // ---------------------------------------------------------------------------
+// 随机服装：配饰白名单（保证"搭配合理"）
+// ---------------------------------------------------------------------------
+// 只从这些里抽 —— 都是我人工过一遍、能和各种底装搭的通用配饰。
+// 不按语义槽位分（因为无法可靠判断一套预设已经包含了哪个槽位），
+// 而是靠「同色系 + 不在预设里出现过 + 同类不重复」三条来保证不打架。
+const RANDOM_ACCESSORIES = [
+    // 头饰
+    { slot: "head", tag: "hair ribbon" },
+    { slot: "head", tag: "hair bow" },
+    { slot: "head", tag: "hairband" },
+    { slot: "head", tag: "hair ornament" },
+    { slot: "head", tag: "hairclip" },
+    { slot: "head", tag: "beret" },
+    // 颈饰
+    { slot: "neck", tag: "choker" },
+    { slot: "neck", tag: "lace choker" },
+    { slot: "neck", tag: "necklace" },
+    { slot: "neck", tag: "neckerchief" },
+    { slot: "neck", tag: "neck ribbon" },
+    // 手
+    { slot: "hand", tag: "gloves" },
+    { slot: "hand", tag: "fingerless gloves" },
+    { slot: "hand", tag: "wrist cuffs" },
+    { slot: "hand", tag: "bracelet" },
+    // 腿
+    { slot: "leg", tag: "thighhighs" },
+    { slot: "leg", tag: "kneehighs" },
+    { slot: "leg", tag: "white socks" },
+    { slot: "leg", tag: "garter belt" },
+    { slot: "leg", tag: "leg ribbon" },
+    // 脚
+    { slot: "foot", tag: "loafers" },
+    { slot: "foot", tag: "mary janes" },
+    { slot: "foot", tag: "high heels" },
+    { slot: "foot", tag: "boots" },
+    { slot: "foot", tag: "sneakers" },
+    // 腰
+    { slot: "waist", tag: "belt" },
+    { slot: "waist", tag: "sash" },
+    { slot: "waist", tag: "waist bow" },
+    // 脸/眼
+    { slot: "face", tag: "glasses" },
+    { slot: "face", tag: "sunglasses" },
+    { slot: "face", tag: "eyepatch" },
+];
+
+/** 色系词。一套预设里出现哪个色系，配饰就优先挑同色系的写法。 */
+const COLOR_WORDS = [
+    "white", "black", "red", "blue", "green", "yellow", "pink", "purple",
+    "brown", "grey", "gray", "orange", "silver", "gold", "aqua", "navy",
+];
+
+/** 从预设标签串里提取出现的色系（用于给配饰上色） */
+function presetColors(preset) {
+    const set = new Set();
+    for (const raw of preset.tags || []) {
+        const low = String(raw).toLowerCase();
+        for (const c of COLOR_WORDS) {
+            if (low === c || low.startsWith(c + " ") || low.includes(" " + c + " ")) set.add(c);
+        }
+    }
+    return [...set];
+}
+
+/**
+ * 给一套预设随机补配饰。返回新的 tags 数组（不改原对象）。
+ *
+ * 三条约束（缺一不可，否则就会出现"两顶帽子"或"粉发带配黑军装"）：
+ *   1. 同类槽位每套最多加 1 个
+ *   2. 配饰必须**不在**预设已有的标签里（含同色变体，如已有 black thighhighs 就不再加 thighhighs）
+ *   3. 有色系可用时，只在同色系里挑；没有就用无色版本
+ */
+function withRandomAccessories(preset, count) {
+    const presetTags = (preset.tags || []).map((x) => String(x).toLowerCase().trim());
+    const have = new Set(presetTags);
+    const colors = presetColors(preset);
+
+    // 白名单条目的槽位表（支持带颜色前缀的写法）
+    const SLOT_BY_TAG = new Map();
+    for (const a of RANDOM_ACCESSORIES) SLOT_BY_TAG.set(a.tag, a.slot);
+    const slotOfTag = (raw) => {
+        const low = String(raw).toLowerCase().trim();
+        if (SLOT_BY_TAG.has(low)) return SLOT_BY_TAG.get(low);
+        const parts = low.split(" ");
+        for (let i = 1; i < parts.length; i++) {
+            const rest = parts.slice(i).join(" ");
+            if (SLOT_BY_TAG.has(rest)) return SLOT_BY_TAG.get(rest);
+        }
+        return null;
+    };
+    // raw 是不是 base 的写法（含颜色前缀变体）
+    const isVariantOf = (raw, base) => {
+        const low = String(raw).toLowerCase().trim();
+        return low === base || low.endsWith(" " + base);
+    };
+
+    // ⚠️ 用**槽位**判断「这套已经有同类配饰了」，不要用子串匹配。
+    //    实测两种错法：
+    //      · 预设已有 black belt(waist) → 该拦住 waist 的，却因为
+    //        字符串里都有 "belt" 把 garter belt(leg) 也拦了（77 次误判）
+    //      · 预设已有 white gloves(hand) → 该被拦住的 black fingerless
+    //        gloves(hand) 又加了进去（真漏判）
+    //    槽位表两个都能判对。
+    const usedSlots = new Set();
+    for (const h of presetTags) {
+        const s = slotOfTag(h);
+        if (s) usedSlots.add(s);
+    }
+
+    const add = [];
+    const pool = RANDOM_ACCESSORIES.slice();
+    // 洗牌，避免总是抽到数组前几个
+    for (let i = pool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    for (const item of pool) {
+        if (add.length >= count) break;
+        if (usedSlots.has(item.slot)) continue;          // 同槽位只加一个
+
+        let tag = item.tag;
+        if (colors.length) {
+            const cands = colors.map((c) => `${c} ${item.tag}`).filter((v) => !have.has(v));
+            if (cands.length) tag = cands[Math.floor(Math.random() * cands.length)];
+        }
+        const low = tag.toLowerCase();
+        if (have.has(low)) continue;                     // 一模一样 → 跳过
+
+        // 预设里已有这个东西的其它颜色版本 → 不再加
+        //（已有 black thighhighs 就不加 thighhighs / white thighhighs）
+        let variant = false;
+        for (const h of presetTags) {
+            if (isVariantOf(h, item.tag)) { variant = true; break; }
+        }
+        if (variant) continue;
+
+        have.add(low);
+        usedSlots.add(item.slot);
+        add.push(tag);
+    }
+    return (preset.tags || []).concat(add);
+}
+
+// ---------------------------------------------------------------------------
 // 作品 → 角色索引
 // ---------------------------------------------------------------------------
 // ⚠️ 性能要点：不要「每个作品都 filter 一遍全部角色」。
@@ -1459,6 +1603,14 @@ function buildPanel(node, data) {
     });
     main.insertBefore(outfitBar, selectedBar);
 
+    // ---- 随机服装栏（只在服装视图显示，紧跟在分组条下面）----
+    const randomBar = el("div", {
+        display: "none", padding: "6px 10px", gap: "10px", alignItems: "center",
+        flexWrap: "wrap", borderBottom: `1px solid ${THEME.line}`,
+        background: THEME.panel,
+    });
+    main.insertBefore(randomBar, selectedBar);
+
     // ---- 姿势参考：分组条（只在姿势视图显示）----
     const poseBar = el("div", {
         display: "none", padding: "6px 10px", gap: "5px", alignItems: "center",
@@ -1673,6 +1825,14 @@ function buildPanel(node, data) {
 
     function applyPresetOutfit(preset) {
         if (!preset) return;
+        // 留一条记录：测试与调试用（node.__animansfwLastPreset.zh / .g / .id）
+        try {
+            node.__animansfwLastPreset = {
+                id: preset.id, zh: preset.zh, g: preset.g, src: preset.src,
+                lock: !!preset.lock, nTags: (preset.tags || []).length,
+                at: Date.now(),
+            };
+        } catch (e) { /* 忽略 */ }
         // 同一条再点一次 = 取消
         if (currentPreset && currentPreset.id === preset.id) {
             currentPreset = null;
@@ -1764,6 +1924,7 @@ function buildPanel(node, data) {
         search.style.display = overlayView ? "none" : "";
         side.style.display = overlayView ? "none" : "";
         outfitBar.style.display = isOutfit ? "flex" : "none";
+        randomBar.style.display = isOutfit ? "flex" : "none";
         poseBar.style.display = isPose ? "flex" : "none";
         mineBar.style.display = isMine ? "flex" : "none";
         charBar.style.display = isChar ? "flex" : "none";
@@ -1826,6 +1987,93 @@ function buildPanel(node, data) {
             outfitTimer = setTimeout(renderGrid, 140);
         });
         outfitBar.appendChild(inp);
+        renderRandomBar();
+    }
+
+    // ------------------------------------------------------------------
+    // 随机服装
+    // ------------------------------------------------------------------
+    let randomWithAccessories = false;   // 是否顺带随机配饰
+    let lastRandomId = "";               // 避免连续抽到同一套
+
+    /** 当前筛选条件下可抽的预设池（和网格看到的一致） */
+    function randomPool() {
+        const q = outfitQuery.trim().toLowerCase();
+        return (STATE.data?.outfit_presets || []).filter((p) => {
+            if (outfitSrc !== "all" && p.src !== outfitSrc) return false;
+            if (outfitGroup !== "all" && p.g !== outfitGroup) return false;
+            if (q && !(`${p.zh} ${p.en} ${(p.tags || []).join(" ")}`.toLowerCase().includes(q))) {
+                return false;
+            }
+            return true;
+        });
+    }
+
+    function randomOutfit() {
+        const pool = randomPool();
+        if (!pool.length) { toast("当前筛选下没有可抽的预设"); return; }
+        let pick = pool[Math.floor(Math.random() * pool.length)];
+        // 池子大于 1 时避免连续重复
+        if (pool.length > 1) {
+            for (let i = 0; i < 6 && pick.id === lastRandomId; i++) {
+                pick = pool[Math.floor(Math.random() * pool.length)];
+            }
+        }
+        lastRandomId = pick.id;
+
+        // 配饰补全：只影响这次写入的 tags，不改预设对象本身
+        let toApply = pick;
+        let added = [];
+        if (randomWithAccessories) {
+            const tags = withRandomAccessories(pick, 1 + Math.floor(Math.random() * 2));
+            added = tags.filter((x) => !(pick.tags || []).includes(x));
+            if (added.length) toApply = Object.assign({}, pick, { tags });
+        }
+        applyPresetOutfit(toApply);
+        try {
+            if (node.__animansfwLastPreset) {
+                node.__animansfwLastPreset.random = true;
+                node.__animansfwLastPreset.added = added;
+            }
+        } catch (e) { /* 忽略 */ }
+
+        const g = (STATE.data?.outfit_groups || []).find((x) => x.id === pick.g);
+        toast(`🎲 ${pick.zh}${g ? `（${g.zh}）` : ""}`
+            + (added.length ? ` ＋ ${added.join("、")}` : "")
+            + (pick.lock ? " · 含角色锁定" : ""));
+    }
+
+    function renderRandomBar() {
+        randomBar.innerHTML = "";
+        const btn = el("button", {
+            padding: "4px 12px", borderRadius: "10px", cursor: "pointer",
+            fontSize: "11px", fontWeight: "700",
+            border: `1px solid ${THEME.outfit}`,
+            background: "rgba(232,121,249,0.16)", color: THEME.outfit,
+        }, {
+            textContent: "🎲 随机一套服装",
+            title: "在「当前来源 + 当前分组 + 搜索词」筛选出的预设里随机抽一套。"
+                + "每一套预设本身就是成套的，所以搭配一定合理；"
+                + "勾上「＋配饰」会再补 1~2 个同色系配饰。",
+        });
+        btn.onclick = randomOutfit;
+        randomBar.appendChild(btn);
+
+        const chk = el("label", {
+            display: "inline-flex", alignItems: "center", gap: "4px",
+            fontSize: "11px", color: THEME.dim, cursor: "pointer",
+        });
+        const box = el("input", { cursor: "pointer" }, { type: "checkbox" });
+        box.checked = randomWithAccessories;
+        box.addEventListener("change", () => { randomWithAccessories = box.checked; });
+        chk.appendChild(box);
+        chk.appendChild(el("span", {}, { textContent: "＋配饰（同色系，1~2 个）" }));
+        randomBar.appendChild(chk);
+
+        const cnt = randomPool().length;
+        randomBar.appendChild(el("span", {
+            fontSize: "10px", color: THEME.dim,
+        }, { textContent: `可抽 ${cnt} 套` }));
     }
 
     function wireOutfitView() {
@@ -2970,6 +3218,18 @@ function buildPanel(node, data) {
         }
     }
 
+    /** 分组名 → 可搜索文本（"碧蓝·皇家" / "封印者·基础" …），懒建并缓存 */
+    function groupHaystack() {
+        if (!STATE.__groupHay) {
+            const m = {};
+            for (const g of STATE.data?.outfit_groups || []) {
+                m[g.id] = `${g.zh || ""} ${g.en || ""}`.toLowerCase();
+            }
+            STATE.__groupHay = m;
+        }
+        return STATE.__groupHay;
+    }
+
     function renderOutfitGrid() {
         grid.innerHTML = "";
         const all = STATE.data?.outfit_presets || [];
@@ -2978,7 +3238,10 @@ function buildPanel(node, data) {
             if (outfitSrc !== "all" && p.src !== outfitSrc) return false;
             if (outfitGroup !== "all" && p.g !== outfitGroup) return false;
             if (!q) return true;
-            const hay = `${p.zh} ${p.en} ${(p.tags || []).join(" ")}`.toLowerCase();
+            // ⚠️ 搜索范围必须包含**分组名**：游戏 COS 的预设名是「皇家·海军制服」，
+            //    标签里也没有「碧蓝」，用户搜「碧蓝」本来一个都搜不到（实测 0 张）。
+            const hay = `${p.zh} ${p.en} ${(p.tags || []).join(" ")} `
+                + `${groupHaystack()[p.g] || ""} ${p.g || ""}`.toLowerCase();
             return hay.includes(q);
         });
         if (!list.length) {
