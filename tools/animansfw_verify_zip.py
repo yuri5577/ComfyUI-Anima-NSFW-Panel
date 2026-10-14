@@ -247,14 +247,30 @@ if mod is not None:
           f'{sum(1 for c in _cl if c.get("gender") == "uncertain")} 个存疑')
 
     pc = d["outfit_preset_count"]
-    check("服装预设 568 套 / 23 组",
-          pc["all"] == 568 and len(d["outfit_groups"]) == 23,
+    check("服装预设 568 套 / 37 组",
+          pc["all"] == 568 and len(d["outfit_groups"]) == 37,
           f'{pc["all"]} (手工 {pc["curated"]} + 服装库 {pc["imported"]}'
           f' + 游戏COS {sum(1 for p in d["outfit_presets"] if p.get("src") == "game-cos")})'
           f' / {len(d["outfit_groups"])}')
-    check("游戏 COS 服装 50 套 / 9 组",
+    # 游戏分组 8 个：碧蓝 6 阵营 + 封印者 + 通用 COS
+    # （v1.9.9 把封印者的「基础」「各队制服」并成一组）
+    check("游戏 COS 服装 50 套 / 8 组",
           sum(1 for p in d["outfit_presets"] if p.get("src") == "game-cos") >= 50
-          and len([g for g in d["outfit_groups"] if g.get("src") == "game-cos"]) == 9)
+          and len([g for g in d["outfit_groups"] if g.get("src") == "game-cos"]) == 8)
+
+    # 服装分组分布检查：568 套 / 37 组，最大的组不能超过 15%（防止又退化成
+    # 原来那种"性感暴露一组占 160/518"的样子 —— 那样等于没分类）
+    _gcount = {}
+    for _p in d["outfit_presets"]:
+        _gcount[_p["g"]] = _gcount.get(_p["g"], 0) + 1
+    _total = sum(_gcount.values()) or 1
+    _biggest = max(_gcount.items(), key=lambda kv: kv[1]) if _gcount else ("", 0)
+    check("服装分组分布均衡（最大组 < 15%）",
+          _biggest[1] / _total < 0.15,
+          f'{_biggest[0]} {_biggest[1]}/{_total} = {_biggest[1] / _total:.0%}，共 {len(_gcount)} 组')
+    check("服装分组没有空组",
+          all(v > 0 for v in _gcount.values()),
+          f'{len(_gcount)} 组')
     check("服装带预览图 430",
           sum(1 for p in d["outfit_presets"] if p["preview"]) == 430)
     check("姿势预设 297 个 / 8 组",

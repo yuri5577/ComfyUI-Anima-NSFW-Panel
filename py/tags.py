@@ -1540,23 +1540,32 @@ def _split_multi(value):
 
 
 def outfit_presets_as_list():
-    """把手工预设 + 导入的服装库预设展开成前端用的字典列表。"""
+    """把手工预设 + 导入的服装库预设展开成前端用的字典列表。
+
+    ``g`` 是**自动分类**的结果（见 py/outfit_groups.py）—— 原来用的是
+    手工/导入时写死的分组，那些分组又偏又常错（「性感暴露」一组占 160/518，
+    `d_dress` 里混着 garter straps）。现在按服装内容重新归组。
+    """
     out = []
     for idx, item in enumerate(_ALL_PRESETS):
         name, en, group, tags, rating, lvl, note = item[:7]
+        _src = ("game-cos" if "游戏COS" in note
+                else "import" if note.startswith("来源:")
+                else "curated")
+        _tag_list = [t.strip() for t in tags.split(",") if t.strip()]
+        _auto = _og.classify(_src, group, name, _tag_list)
         out.append({
             "id": f"of{idx:03d}",
+            "g_orig": group,      # 原始分组（排查用）
+            "g": _auto,           # 自动分类结果（面板用它）
             "zh": name,
             "en": en,
-            "g": group,
-            "tags": [t.strip() for t in tags.split(",") if t.strip()],
+            "tags": _tag_list,
             "r": rating,
             "lvl": int(lvl),
             "lock": note.startswith("锁定"),
             "note": note,
-            "src": ("game-cos" if "游戏COS" in note
-                    else "import" if note.startswith("来源:")
-                    else "curated"),
+            "src": _src,
             "preview": OUTFIT_PREVIEWS.get(name, ""),
         })
     return out
@@ -1613,15 +1622,19 @@ except Exception:  # pragma: no cover - 缺文件时不影响手工预设
     POSE_GROUPS, POSE_PRESETS_IMPORT = [], []
     IMPORT_EXTRA_TAGS = []
 
+# 服装分组与自动分类（v1.9.9）
+from . import outfit_groups as _og  # noqa: E402
+
 # 游戏 COS 服装（碧蓝航线 / 封印者 / 通用 cos），标签都查过 Danbooru 热度
 try:
     from .game_costumes import GAME_OUTFIT_GROUPS, GAME_OUTFIT_PRESETS
 except Exception:  # pragma: no cover
     GAME_OUTFIT_GROUPS, GAME_OUTFIT_PRESETS = [], []
 
-ALL_OUTFIT_GROUPS = (list(OUTFIT_GROUPS)
-                     + [dict(g) for g in IMPORT_GROUPS]
-                     + [dict(g) for g in GAME_OUTFIT_GROUPS])
+# ⚠️ 分组清单现在来自自动分类（py/outfit_groups.as_group_list()）。
+#    旧的 OUTFIT_GROUPS / IMPORT_GROUPS / GAME_OUTFIT_GROUPS 只用于给预设提供
+#    原始 gid（供 GAME_MAP 映射和自动分类参考），不再直接作为面板分组。
+ALL_OUTFIT_GROUPS = _og.as_group_list()
 ALL_POSE_GROUPS = [dict(g) for g in POSE_GROUPS]
 _ALL_PRESETS = (list(OUTFIT_PRESETS)
                 + list(OUTFIT_PRESETS_IMPORT)

@@ -174,14 +174,24 @@ async function main() {
       total: btns.map(b=>String(b.textContent||"").replace(/\\s+/g," ").trim())
                  .find(x=>/^全部\\s*\\d+$/.test(x)) || null,
       game: btns.map(b=>String(b.textContent||"").replace(/\\s+/g," ").trim()).filter(isGameGroup),
+      // 分组 id 从 data-g 读（按钮上写的），别从文案反推
+      gameIds: btns.map(b=>b.getAttribute && b.getAttribute("data-g")).filter(Boolean),
       cards: ${CARDS}.length,
       dom: ov.querySelectorAll("*").length,
     };
   `);
   info?.total ? ok("服装预设总数显示", info.total) : bad("服装预设总数显示", "(没找到)");
-  (info?.game || []).length >= 9
+  // 游戏 COS 分组：碧蓝 6 个阵营 + 封印者 + 通用 COS = 8 个。
+  // ⚠️ v1.9.9 把封印者的「基础」「各队制服」两组并成一个（共 10 套），
+  //    所以这里从 9 变 8 —— 别再写死数字，按实际存在的组校验。
+  const GAME_IDS = ["gc_al_royal", "gc_al_eagle", "gc_al_iron", "gc_al_sakura",
+                    "gc_al_other", "gc_al_base", "gc_cl", "gc_general"];
+  const gameIds = info?.gameIds || [];
+  const missing = GAME_IDS.filter((g) => !gameIds.includes(g));
+  (info?.game || []).length >= 8 && missing.length === 0
     ? ok("游戏 COS 分组按钮", `${info.game.length} 个：${info.game.slice(0, 9).join(" ")}`)
-    : bad("游戏 COS 分组按钮", (info?.game || []).join(" ") || "(无)");
+    : bad("游戏 COS 分组按钮",
+        `按钮 ${(info?.game || []).length} 个，缺 ${missing.join(",") || "无"}`);
   if (info?.cards > 0) {
     ok("服装卡片已渲染", `${info.cards} 张`);
   } else {
@@ -246,6 +256,8 @@ async function main() {
     const gLabel=String(gbtn.textContent).replace(/\\s+/g," ").trim();
     gbtn.click();
     await new Promise(r=>setTimeout(r,350));
+    // 从点下去的那个分组按钮反查它的分组 id（按钮带 data-g），别写死
+    const grpBtn = ov.querySelector('[data-g]');
     const keChou=[...ov.querySelectorAll("span,div")]
       .map(x=>String(x.textContent||"").replace(/\\s+/g," ").trim())
       .find(x=>/^可抽 \\d+ 套$/.test(x)) || null;
@@ -257,7 +269,8 @@ async function main() {
       const rec=window.__n.__animansfwLastPreset;
       if (rec && rec.random) { n++; groups.add(rec.g); names.push(rec.zh); }
     }
-    return { ok:true, gLabel, groups:[...groups], n, keChou, sample:names.slice(0,3) };
+    return { ok:true, gLabel, groupId:(window.__n && window.__n.__animansfwLastGroup) || null,
+             groups:[...groups], n, keChou, sample:names.slice(0,3) };
   `);
   if (inGroup?.ok) {
     ok("分组按钮已点", inGroup.gLabel);
@@ -265,9 +278,13 @@ async function main() {
       : bad("筛选后显示可抽数量", "没找到「可抽 N 套」");
     inGroup.n >= 20 ? ok("随机留下了记录", `${inGroup.n}/25 次`)
       : bad("随机留下了记录", `${inGroup.n}/25 次`);
-    inGroup.groups.length === 1 && inGroup.groups[0] === "al_royal"
-      ? ok("分组内随机只在该组抽", `组=${inGroup.groups.join(",")}  例: ${inGroup.sample.join(" / ")}`)
-      : bad("分组内随机只在该组抽", `抽到了 [${inGroup.groups.join(",")}]`);
+    // ⚠️ 别写死分组 id（旧的是 "al_royal"，v1.9.9 改成了 "gc_al_royal"）。
+    //    从点下去的那个按钮反查它对应的分组 id，再比对抽出来的记录。
+    const wantG = inGroup.groupId;
+    inGroup.groups.length === 1 && wantG && inGroup.groups[0] === wantG
+      ? ok("分组内随机只在该组抽", `组=${inGroup.groups.join(",")} == 按钮的 ${wantG}  例: ${inGroup.sample.join(" / ")}`)
+      : bad("分组内随机只在该组抽",
+          `抽到了 [${inGroup.groups.join(",")}]，期望 [${wantG || "?"}]`);
   } else {
     bad("分组内随机", JSON.stringify(inGroup).slice(0, 200));
   }

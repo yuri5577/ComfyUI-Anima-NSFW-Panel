@@ -92,3 +92,15 @@ node tools/animansfw_browser_works.mjs
 > ⚠️ 改动作品相关逻辑时**务必拿一个只在角色库里、不是版权标签的作品测**
 > （例如 `封印者`）。只测「原神 / 碧蓝航线」这类版权标签作品是发现不了问题的
 > —— 它们一直正常。
+
+## 8. 服装分类（离线，不用启动 ComfyUI）
+
+改完 `py/outfit_groups.py` 的 `RULE_GROUPS` 后：
+
+```bash
+python tools/animansfw_verify_zip.py     # 分组数 / 分布均衡 / 无空组
+node tools/animansfw_browser_outfit.mjs  # 真浏览器：分组按钮 + 组内随机
+```
+
+> ⚠️ 两条防退化断言：**最大组 < 15%**、**没有空组**。
+> 原来「服装库·性感暴露」一组就占 160/518（31%），等于没分类。

@@ -2040,7 +2040,16 @@ function buildPanel(node, data) {
                 background: on ? `${color || THEME.outfit}2e` : THEME.panel2,
                 color: on ? (color || THEME.outfit) : THEME.text,
             }, { textContent: `${label}${count != null ? ` ${count}` : ""}` });
-            b.onclick = () => { outfitGroup = id; renderOutfitBar(); renderGrid(); };
+            // data-g 给测试用：从按钮反查它对应的分组 id，避免测试里写死 id
+            // （写死过 "al_royal"，v1.9.9 改成 "gc_al_royal" 后测试就假失败了）
+            b.setAttribute("data-g", id);
+            b.onclick = () => {
+                outfitGroup = id;
+                // 记一笔，供测试/调试核对"抽出来的这套是不是在这个组里"
+                if (node) node.__animansfwLastGroup = id;
+                renderOutfitBar();
+                renderGrid();
+            };
             return b;
         };
         outfitBar.appendChild(mk("all", "全部", null));
