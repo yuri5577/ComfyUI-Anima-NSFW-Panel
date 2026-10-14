@@ -133,3 +133,19 @@ node tools/animansfw_browser_thumbs.mjs
 >    否则多线程抢同一条连接会大量失败（串行时看不出问题）
 > 2. `Executor.map` 是**阻塞迭代**，在调用方线程里等结果 ——
 >    想真并发要用 `submit` + `as_completed`
+
+## 11. 面板窄视口布局（需要先启动 ComfyUI）
+
+```bash
+node tools/animansfw_browser_sidebar.mjs
+```
+
+10 个视口宽度（320~1600px），断言：面板子树无横向溢出、无控件越界、
+分类名未被裁、侧栏在面板内、窄面板侧栏在网格上方、宽面板回到左竖列。
+
+> ⚠️ 这个测试是为「左侧栏显示不完整」加的。真正的根因是 **header 不折行**
+> 把面板子树撑到 1373px（面板只有 1178px），内容被居中推左 91px 后被
+> `overflow: hidden` 裁掉。**关键线索是"偏移量恒定 91px、与视口无关"** ——
+> 以后遇到"某块内容被切"，先比 `offsetLeft` 和 `getBoundingClientRect().left`：
+> 两者差一个定值就说明有东西在溢出后被居中/裁剪，去查
+> `scrollWidth - clientWidth` 最大的那个元素。

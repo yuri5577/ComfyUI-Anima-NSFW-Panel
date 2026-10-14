@@ -214,8 +214,10 @@ gameCos.length >= 40
   ? ok("游戏 COS 预设已入库", `${gameCos.length} 套 / ${gcosGroups.size} 组`)
   : bad("游戏 COS 预设已入库", `${gameCos.length} 套`);
 
-const alCount = presets.filter((p) => String(p.g).startsWith("al_")).length;
-const clCount = presets.filter((p) => String(p.g).startsWith("cl_")).length;
+// ⚠️ 分组 id 前缀在 v1.9.9 重分类时从 `al_` / `cl_` 改成了 `gc_al_` / `gc_cl_`
+//    （游戏 COS 的分组现在统一带 `gc_` 前缀）。写死旧前缀会假失败。
+const alCount = presets.filter((p) => String(p.g).startsWith("gc_al_")).length;
+const clCount = presets.filter((p) => String(p.g).startsWith("gc_cl")).length;
 alCount >= 25 ? ok("碧蓝航线服装", `${alCount} 套`) : bad("碧蓝航线服装", `${alCount} 套`);
 clCount >= 10 ? ok("封印者服装", `${clCount} 套`) : bad("封印者服装", `${clCount} 套`);
 

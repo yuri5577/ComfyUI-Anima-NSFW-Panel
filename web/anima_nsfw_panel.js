@@ -1167,15 +1167,25 @@ function buildPanel(node, data) {
         zIndex: "100050",
         display: "flex",
         alignItems: "center",
-        justifyContent: "center",
+        // ⚠️ 用 `margin: auto` 居中而**不是** `justifyContent: center`：
+        //    可滚动容器里用 justify-content 居中时，内容溢出左边界会**滚不到**
+        //    （flexbox 的经典坑：负溢出区不可达）。margin:auto 两边都能滚到。
         backdropFilter: "blur(2px)",
+        overflow: "auto",
+        padding: "8px",
+        boxSizing: "border-box",
     });
     overlay.addEventListener("mousedown", (e) => {
         if (e.target === overlay) commit(true);
     });
 
     const box = el("div", {
+        // 面板宽度跟着视口走（不设最小宽度 —— 设了在极窄视口下 `min(720px, 96vw)`
+        // 还是等于视口宽，没意义）。窄的时候由 applyResponsiveLayout() 收缩侧栏，
+        // 保住网格的可读宽度，这样才不会"左边的选项显示不完整"。
         width: "min(1180px, 96vw)",
+        maxWidth: "none",
+        margin: "auto",
         height: "min(820px, 92vh)",
         background: THEME.bg,
         border: `1px solid ${THEME.line}`,
@@ -1192,6 +1202,18 @@ function buildPanel(node, data) {
     // ---- 标题栏 ----
     const header = el("div", {
         display: "flex", alignItems: "center", gap: "10px",
+        // ⚠️ `flexWrap: "wrap"` + `minWidth: 0` 是**必须的**，这是用户反馈
+        //    「左边的选项显示不完整」的**真正根因**。
+        //
+        //    实测：面板 clientWidth 1178px，但整个面板子树的 scrollWidth 是
+        //    **1373px** —— 唯一溢出的就是这个 header（`flexWrap` 默认 nowrap，
+        //    里面 10 个按钮 + 搜索框排成一行不肯折行，需要 1373px）。
+        //    溢出导致面板内容被居中推左 91px，而面板 `overflow: hidden`
+        //    于是把**左边 91px 直接裁掉** —— 侧栏的「全部标签」「露骨 / 强度」
+        //    这些就是被这么切掉的，且与视口宽度无关（恒定 91px）。
+        //
+        //    允许折行后 header 最多占满面板宽度，不再撑宽子树。
+        flexWrap: "wrap", minWidth: "0", maxWidth: "100%",
         padding: "10px 14px", borderBottom: `1px solid ${THEME.line}`,
         background: THEME.panel,
     });
@@ -1434,15 +1456,96 @@ function buildPanel(node, data) {
     box.appendChild(header);
 
     // ---- 强度档 + 分类 侧栏 ----
-    const body = el("div", { display: "flex", flex: "1", minHeight: "0" });
+    const body = el("div", {
+        display: "flex", flexDirection: "row",
+        flex: "1 1 auto", minHeight: "0",
+        width: "100%", maxWidth: "100%", minWidth: "0",
+        overflow: "hidden",
+    });
     box.appendChild(body);
 
+    const SIDE_W = "var(--animansfw-side-w, 186px)";
     const side = el("div", {
-        width: "186px", borderRight: `1px solid ${THEME.line}`,
-        padding: "10px", overflowY: "auto", background: THEME.panel,
-        flexShrink: "0",
+        width: SIDE_W, minWidth: "0", borderRight: `1px solid ${THEME.line}`,
+        padding: "10px",
+        overflowY: "auto", overflowX: "auto",
+        background: THEME.panel, flexShrink: "0",
     });
     body.appendChild(side);
+
+    /**
+     * 窄面板时把侧栏从**左侧竖列**改成**顶部横向条**。
+     *
+     * ## 为什么不用"收缩侧栏宽度"
+     *
+     * 用户反馈「左边的选项显示不完整」。我原先的做法是按面板宽度把侧栏从
+     * 186px 收到 124px 保住网格 —— 但实测在 420px 视口下面板只有 403px，
+     * 侧栏 124px 里塞「露骨 / 强度」这种 4 字按钮（每行 2 个 × 48px + gap）
+     * 就已经溢出，按钮文字被裁；再窄就完全没法看。
+     *
+     * 根子上是"横向空间不够"：403px 要同时放侧栏 + 网格，怎么分都不够。
+     * 所以改成**换行**：窄的时候侧栏横过来占满整个面板宽度（403px 足够摆下
+     * 三档强度 + 分类按钮自动换行），网格在下面拿满宽度。
+     *
+     * 阈值 640px：宽于它保持原来的左竖列（现在的观感不变）。
+     */
+    const NARROW_BREAK = 640;
+
+    function applyResponsiveLayout() {
+        const w = box.getBoundingClientRect().width || 1180;
+        const narrow = w < NARROW_BREAK;
+        box.__animansfwNarrow = narrow;
+
+        if (narrow) {
+            body.style.flexDirection = "column";
+            side.style.width = "100%";
+            side.style.maxWidth = "100%";
+            side.style.flex = "0 0 auto";
+            side.style.maxHeight = "44vh";
+            side.style.borderRight = "none";
+            side.style.borderBottom = `1px solid ${THEME.line}`;
+            // 分类列表在横条里排成多列，别拉成一长条
+            if (catList) {
+                catList.style.display = "grid";
+                catList.style.gridTemplateColumns = "repeat(auto-fill, minmax(104px, 1fr))";
+                catList.style.gap = "2px 6px";
+            }
+            if (workList) workList.style.display = "none";
+        } else {
+            body.style.flexDirection = "row";
+            side.style.width = "186px";
+            side.style.maxWidth = "";
+            side.style.flex = "0 0 auto";
+            side.style.maxHeight = "";
+            side.style.borderRight = `1px solid ${THEME.line}`;
+            side.style.borderBottom = "none";
+            if (catList) {
+                catList.style.display = "block";
+                catList.style.gridTemplateColumns = "";
+                catList.style.gap = "0";
+            }
+            if (workList) workList.style.display = "";
+        }
+    }
+    // ⚠️ 首次调用**不在这里** —— 本函数引用 catList / workList，
+    //    而它们是后面才创建的 `const`（TDZ：提前访问会 ReferenceError）。
+    //    统一放在面板构建末尾调用（见 renderActViewRow() 那一带）。
+    // 面板宽度会随窗口变化（96vw），要跟着重算。
+    // 用 ResizeObserver（Chrome 64+ / ComfyUI 前端都支持），没有就退回 window resize。
+    if (typeof ResizeObserver === "function") {
+        try {
+            const ro = new ResizeObserver(() => applyResponsiveLayout());
+            ro.observe(box);
+            overlay.__animansfwRO = ro;      // 关面板时断开（见 commit）
+        } catch (e) { /* ignore */ }
+    }
+    // ⚠️ 必须判 `typeof window.addEventListener === "function"`：
+    //    离线冒烟测试用的是**自己搭的 DOM 桩**，里面没有 addEventListener，
+    //    直接调用会抛 "window.addEventListener is not a function" 把整个面板
+    //    构建打断（实测踩过 —— 表现是"点击后面板浮层没出现"）。
+    if (typeof window.addEventListener === "function") {
+        window.addEventListener("resize", applyResponsiveLayout);
+    }
 
     side.appendChild(el("div", {
         fontSize: "11px", color: THEME.dim, margin: "2px 0 6px",
@@ -1481,13 +1584,21 @@ function buildPanel(node, data) {
     const addCat = (id, label, count, color, warn) => {
         const btn = el("button", {
             display: "flex", justifyContent: "space-between", alignItems: "center",
+            gap: "4px",
             padding: "5px 8px", borderRadius: "6px", cursor: "pointer", fontSize: "12px",
             border: "1px solid transparent", background: "transparent", color: THEME.text,
-            textAlign: "left",
+            textAlign: "left", minWidth: "0", maxWidth: "100%",
         });
-        const left = el("span", { color: color || THEME.text }, { textContent: label });
+        // ⚠️ 左侧文字必须 `minWidth: 0` + 省略号：
+        //    flex 子项默认 `min-width: auto`（= 内容宽度），长标签会把右边的数字
+        //    顶出去，窄视口下看起来就是"左边的选项显示不完整"（实测反馈）。
+        const left = el("span", {
+            color: color || THEME.text,
+            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+            minWidth: "0", flex: "1 1 auto",
+        }, { textContent: label });
         const right = el("span", {
-            fontSize: "10px", color: warn ? THEME.dim : THEME.dim,
+            fontSize: "10px", color: THEME.dim, flexShrink: "0",
         }, { textContent: String(count) });
         btn.appendChild(left);
         btn.appendChild(right);
@@ -3866,6 +3977,13 @@ function buildPanel(node, data) {
     function commit(fromPanel) {
         if (committed) return;
         committed = true;
+        // 收尾：断开布局监听，避免面板关掉后还占着 ResizeObserver / resize 回调
+        try { overlay.__animansfwRO?.disconnect?.(); } catch (e) { /* ignore */ }
+        try {
+            if (typeof window.removeEventListener === "function") {
+                window.removeEventListener("resize", applyResponsiveLayout);
+            }
+        } catch (e) { /* ignore */ }
         writeTags(node, joinTags(order));
         // 种子：先写本节点控件，再推给下游采样器
         const smw = findWidget(node, "seed_mode");
@@ -3912,6 +4030,9 @@ function buildPanel(node, data) {
 
     buildTextInputs(footer, node, sync);
     syncCatButtons();
+    // 窄面板布局（侧栏横到顶部）—— 必须放在这里：它引用 catList / workList，
+    // 那两个 `const` 在上面才创建好（提前调用会 TDZ 报错）。
+    applyResponsiveLayout();
     // ⚠️ 必须在这里先建好动作/视角快速条：sync() → renderGrid() → renderSelected()
     //    里会调 paintQuickRow()，晚建的话 chip 的选中态第一次同步不上。
     renderActViewRow();
