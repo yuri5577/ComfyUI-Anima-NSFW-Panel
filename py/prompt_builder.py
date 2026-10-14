@@ -369,6 +369,98 @@ _SCENE_PHRASE = {
     "steam": "veiled in steam",
 }
 
+# 动作/姿势 → 自然语言。只有 act_pose 是互斥的（不可能又站又躺），
+# 腿部/手臂/动态可以和主姿态叠加，所以这里按"主姿态 + 叠加细节"来写。
+_ACTION_PHRASE = {
+    # 主姿态
+    "standing": "standing",
+    "sitting": "seated",
+    "lying": "lying down",
+    "lying on back": "lying on her back",
+    "lying on stomach": "lying face down",
+    "lying on side": "lying on her side",
+    "on back": "flat on her back",
+    "on stomach": "flat on her front",
+    "on side": "curled onto one side",
+    "prone": "pressed flat and prone",
+    "kneeling": "kneeling",
+    "squatting": "crouched down low",
+    "crouching": "in a low crouch",
+    "walking": "walking",
+    "running": "running",
+    "jumping": "caught mid-jump",
+    "leaning forward": "leaning forward",
+    "leaning back": "leaning back",
+    "bent over": "bent over",
+    "arched back": "with her back arched",
+    "on all fours": "up on all fours",
+    "sitting on knees": "kneeling with her weight on her heels",
+    "w-sitting": "seated in a W shape",
+    "lotus position": "seated cross-legged",
+    "fetal position": "curled up small",
+    "handstand": "balanced upside down",
+    "top-down bottom-up": "inverted with hips raised",
+    "suspended motion": "held suspended in mid-air",
+    # 腿部叠加
+    "crossed legs": "with her legs crossed",
+    "knees up": "with her knees drawn up",
+    "knees together": "with her knees pressed together",
+    "legs up": "with her legs raised",
+    "legs apart": "with her legs apart",
+    "spread legs": "with her legs spread wide",
+    "foot up": "with one foot lifted",
+    "tiptoes": "up on her toes",
+    # 手臂叠加
+    "arms behind head": "with both arms folded behind her head",
+    "arms behind back": "with her arms held behind her back",
+    "arms up": "with both arms raised",
+    "hand on own cheek": "one hand resting against her cheek",
+    "hand on own chest": "one hand laid on her chest",
+    "hand on own hip": "one hand on her hip",
+    "hand on own thigh": "one hand resting on her thigh",
+    "hand between legs": "one hand slipped between her legs",
+    "hands on own knees": "both hands on her knees",
+    "stretching": "stretching out",
+    "stretching arms": "stretching her arms out",
+    "hugging own legs": "hugging her own legs",
+    "covering mouth": "a hand over her mouth",
+    "covering face": "hiding behind one hand",
+    # 动态叠加
+    "trembling": "trembling",
+    "motion blur": "blurred with motion",
+    "motion lines": "traced with motion lines",
+    "sweatdrop": "a bead of sweat at her temple",
+}
+
+# 机位/朝向/景别的补充（原来只有 17 条，视角拆出来之后要补全）
+_ANGLE_PHRASE_EXTRA = {
+    "front view": "framed head-on",
+    "three-quarter view": "framed at three-quarters",
+    "profile": "framed in clean profile",
+    "high angle": "framed from a high angle",
+    "low angle": "framed from a low angle",
+    "top-down view": "framed straight down",
+    "over-the-shoulder": "framed over her shoulder",
+    "facing viewer": "square to the camera",
+    "facing away": "turned away",
+    # ⚠️ `looking at viewer` / `looking back` 不在这里 —— `_FACE_PHRASE` 已经写了
+    #    更自然的句子（"she looks straight into the camera" /
+    #    "she glances back over her shoulder"）。两边都写会让描述重复，
+    #    而且视角那条是名词性的（"her eyes on the viewer"），单独成句就是病句。
+    "looking away": "turned slightly away, gaze sliding off frame",
+    "looking to the side": "facing forward with her gaze off to one side",
+    "looking up": "standing with her chin lifted",
+    "looking down": "standing with her gaze cast down",
+    "eye contact": "holding steady eye contact",
+    "portrait": "kept to a portrait crop",
+    "wide shot": "pulled back to a wide shot",
+    "depth of field": "with a shallow depth of field",
+    "symmetry": "built on a symmetrical composition",
+    "rule of thirds": "placed off-centre on the thirds",
+    "reflection": "with a reflection caught alongside",
+    "silhouette": "rendered as a silhouette",
+}
+
 _ANGLE_PHRASE = {
     "pov": "shot from the viewer's own point of view",
     "from below": "framed from a low angle",
@@ -388,6 +480,8 @@ _ANGLE_PHRASE = {
     "upper body": "kept to the upper body",
     "cowboy shot": "kept to a three-quarter frame",
 }
+# 视角分类拆出来后新增的标签，短语并进来
+_ANGLE_PHRASE.update(_ANGLE_PHRASE_EXTRA)
 
 _PROP_PHRASE = {
     "bondage": "restrained and unable to move freely",
@@ -487,7 +581,11 @@ def build_caption(tokens: Sequence[str], seed: int = 0, style: str = "anima",
     face = _pick(_FACE_PHRASE, tokens, 2)
     fluid = [] if sfw else _pick(_FLUID_PHRASE, tokens, 2)
     scene = _pick(_SCENE_PHRASE, tokens, 1)
-    angle = _pick(_ANGLE_PHRASE, tokens, 1)
+    # 视角取 4 个：机位 + 朝向 + 景别 可能同时命中，要都写进描述。
+    # （原来只取 2 个，加了朝向类之后「看向观众」会被挤掉。）
+    angle = _pick(_ANGLE_PHRASE, tokens, 4)
+    # 动作/姿势：最多取 3 个（主姿态 + 腿部/手臂/动态叠加）
+    action = _pick(_ACTION_PHRASE, tokens, 3)
     prop = [] if sfw else _pick(_PROP_PHRASE, tokens, 1)
     nude = "" if sfw else _nude_phrase(tokens)
 
@@ -499,6 +597,10 @@ def build_caption(tokens: Sequence[str], seed: int = 0, style: str = "anima",
 
     if act:
         clauses.append(f"{pronoun} {be} " + act[0] + ".")
+    elif action:
+        # ⚠️ 动作要单独成句。原来没有这一段，加了 sitting / standing 之后
+        #    描述里完全体现不出来（只有性行为/表情/场景/镜头）。
+        clauses.append(f"{pronoun} {be} " + ", ".join(action) + ".")
     if prop:
         clauses.append(f"{pronoun} {be} " + prop[0] + ".")
 
@@ -513,16 +615,27 @@ def build_caption(tokens: Sequence[str], seed: int = 0, style: str = "anima",
         sentence = ", ".join(body)
         clauses.append(sentence[0].upper() + sentence[1:] + ".")
 
-    tail_bits: List[str] = []
+    # ⚠️ 原来 scene 和 angle 拼成 "The scene is set X and it is Y."，
+    #    只有 angle 时就变成以 "and it is" 开头的病句（缺主语）。
+    #    改成两句独立的话。
     if scene:
-        tail_bits.append("The scene is set " + scene[0])
+        clauses.append("The scene is set " + scene[0] + ".")
     if angle:
-        tail_bits.append("and it is " + angle[0])
-    if tail_bits:
-        text = " ".join(tail_bits)
-        if not text.endswith("."):
-            text += "."
-        clauses.append(text)
+        # ⚠️ 「朝向」类短语（看向观众 / 视线移开 / 眼神交汇）不能套 "The frame is ..."。
+        #    实测病句：`The frame is her eyes on the viewer, held in a tight close-up.`
+        #    这类要当成独立小句，以代词开头。
+        _DIR_WORDS = ("eye", "gaze", "glance", "chin", "facing", "turned")
+        dirs = [a for a in angle if any(w in a for w in _DIR_WORDS)]
+        frames = [a for a in angle if a not in dirs]
+        if dirs:
+            # 朝向短语一律改写成能接 "She is ..." 的形式（见 _ANGLE_PHRASE_EXTRA），
+            # 所以直接套主谓即可，不需要特殊分支。
+            clauses.append(f"{pronoun.capitalize()} {be} " + dirs[0] + ".")
+        if frames:
+            text = "The frame is " + frames[0]
+            if len(frames) > 1:
+                text += ", " + frames[1]
+            clauses.append(text + ".")
 
     if sfw:
         soloish = any(k in lowered for k in ("solo", "1girl", "1boy"))
@@ -668,6 +781,15 @@ def compose_prompt(
 
     if sfw:
         quality_preset = _join([quality_preset, SFW_QUALITY])
+    # ⚠️ 这里收到的可能是**档位名**（「无（自己写）」「base（原版 28~32 步）」…）
+    #    而不是实际质量词 —— 面板与 preview() 都会先查表翻译，但 compose_prompt
+    #    能被外部脚本直接调用，所以这里也兜一层。
+    #    「无（自己写）」的表值是空字符串；不兜的话档位名会当标签进提示词
+    #    （实测出现过 `无（自己写）, best quality, 1girl…`）。
+    if quality_preset in QUALITY_PRESETS:
+        quality_preset = QUALITY_PRESETS[quality_preset]
+    elif quality_preset.startswith("无"):
+        quality_preset = ""
     head = _join([quality_preset, extra_front, tag_line])
     body = _join([head, caption])
     body = _join([body, extra_tail])

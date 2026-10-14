@@ -42,8 +42,16 @@ CATEGORIES = [
      "desc": "精液量、位置、淫水等"},
     {"id": "prop", "zh": "道具/束缚", "en": "Props & Bondage", "color": "#94a3b8",
      "desc": "情趣道具、束缚、调教器具"},
-    {"id": "scene", "zh": "场景/视角", "en": "Scene & Angle", "color": "#2dd4bf",
-     "desc": "地点、构图、镜头角度"},
+    {"id": "action", "zh": "动作/姿势", "en": "Action & Pose", "color": "#4ade80",
+     "desc": "角色在做什么：站立/坐着/躺着/跪着等主姿态（同组互斥，选一个），"
+             "腿部、手臂、动态可以叠加。与「姿势参考」预设互补 —— 这里是常用动作的"
+             "快速选择，那边是 297 个带预览图的完整姿势库"},
+    {"id": "view", "zh": "镜头/视角", "en": "Camera & View", "color": "#5eead4",
+     "desc": "从哪个角度拍：机位（正面/侧面/俯视/仰视…）、朝向（正面/背面）、"
+             "景别（特写/全身）、焦点、打码。机位与朝向各互斥选一个"},
+    {"id": "scene", "zh": "场景/地点", "en": "Scene", "color": "#2dd4bf",
+     "desc": "地点、时间、氛围（床上、浴室、教室、夜晚…）。"
+             "镜头角度已挪到上面的「镜头/视角」分类"},
     {"id": "character", "zh": "角色名", "en": "Character", "color": "#818cf8",
      "desc": "作品里的具体角色。8000 个角色按热度排序，热门默认可见，其余可搜索或按作品筛；同组互斥，一次只画一个角色"},
     {"id": "copyright", "zh": "游戏/作品", "en": "Copyright", "color": "#c084fc",
@@ -87,7 +95,7 @@ STORY_TAGS = [
     ("pocket watch", "怀表", "prop", None, "soft", 1),
     ("stopwatch", "秒表", "prop", None, "soft", 1),
     ("clock tower", "钟楼", "scene", None, "soft", 1),
-    ("suspended motion", "动作悬停", "scene", None, "hard", 2),
+    ("suspended motion", "动作悬停", "action", "act_pose", "hard", 2),
     ("dust suspended in air", "悬浮的尘埃", "scene", None, "soft", 1),
     ("blue glow", "蓝色辉光", "style", "light", "soft", 1),
     ("time manipulation", "时间操纵", "scene", None, "hard", 2),
@@ -160,7 +168,7 @@ TAGS = [
     ("piledriver", "打桩机（倒立）", "act", "position", "extreme", 3),
     ("full nelson", "全纳尔逊", "act", "position", "extreme", 3),
     ("standing full nelson", "站立全纳尔逊", "act", "position", "extreme", 3),
-    ("legs up", "双腿抬起", "act", "position", "hard", 2),
+    ("legs up", "双腿抬起", "action", "act_legs", "hard", 2),
     ("leg lock", "双腿夹锁", "act", "position", "hard", 2),
     ("straddling", "跨坐", "act", "position", "hard", 2),
     ("grinding", "摩擦顶弄", "act", "motion", "hard", 2),
@@ -225,7 +233,7 @@ TAGS = [
     ("fingering", "手指插入", "solo", "self", "hard", 2),
     ("fingering herself", "手指插自己", "solo", "self", "hard", 2),
     ("touching self", "抚摸自己", "solo", "self", "hard", 2),
-    ("hand between legs", "手在腿间", "solo", "self", "hard", 2),
+    ("hand between legs", "手在腿间", "action", "act_arms", "hard", 2),
     ("hand on own breast", "手放在自己胸上", "solo", "self", "hard", 2),
     ("grabbing own breast", "揉自己的胸", "solo", "self", "hard", 2),
     ("nipple stimulation", "刺激乳头", "solo", "self", "hard", 2),
@@ -234,14 +242,14 @@ TAGS = [
     ("spread ass", "掰开屁股", "solo", "present", "extreme", 3),
     ("presenting", "展示（摆姿势）", "solo", "present", "hard", 2),
     ("presenting armpit", "展示腋下", "solo", "present", "hard", 2),
-    ("spread legs", "张开双腿", "solo", "pose", "hard", 2),
-    ("legs apart", "双腿分开", "solo", "pose", "hard", 2),
-    ("arched back", "弓起的背", "solo", "pose", "hard", 2),
-    ("on all fours", "四肢着地", "solo", "pose", "hard", 2),
-    ("kneeling", "跪姿", "solo", "pose", "soft", 1),
-    ("squatting", "蹲姿", "solo", "pose", "soft", 1),
-    ("bent over", "弯腰前倾", "solo", "pose", "hard", 2),
-    ("top-down bottom-up", "头下脚上", "solo", "pose", "hard", 2),
+    ("spread legs", "张开双腿", "action", "act_legs", "hard", 2),
+    ("legs apart", "双腿分开", "action", "act_legs", "hard", 2),
+    ("arched back", "弓起的背", "action", "act_pose", "hard", 2),
+    ("on all fours", "四肢着地", "action", "act_pose", "hard", 2),
+    ("kneeling", "跪姿", "action", "act_pose", "soft", 1),
+    ("squatting", "蹲姿", "action", "act_pose", "soft", 1),
+    ("bent over", "弯腰前倾", "action", "act_pose", "hard", 2),
+    ("top-down bottom-up", "头下脚上", "action", "act_pose", "hard", 2),
     ("sex toy", "性玩具", "solo", "toy", "hard", 2),
     ("vibrator", "振动棒", "solo", "toy", "hard", 2),
     ("dildo", "假阳具", "solo", "toy", "hard", 2),
@@ -448,7 +456,7 @@ TAGS = [
     ("blush", "脸红", "body", None, "soft", 1),
     ("sweat", "汗水", "body", None, "hard", 2),
     ("sweat drop", "汗珠", "body", None, "hard", 2),
-    ("trembling", "颤抖", "body", None, "hard", 2),
+    ("trembling", "颤抖", "action", "act_motion", "hard", 2),
     ("shivering", "发抖", "body", None, "hard", 2),
     ("trembling thighs", "大腿颤抖", "body", None, "hard", 2),
     ("arched spine", "弓背", "body", None, "hard", 2),
@@ -476,11 +484,11 @@ TAGS = [
     ("teary eyes", "泪眼汪汪", "face", None, "hard", 2),
     ("half-closed eyes", "半闭眼", "face", "eyelids", "hard", 2),
     ("heavy-lidded eyes", "迷离的眼神", "face", "eyelids", "hard", 2),
-    ("looking at viewer", "看向观众", "face", "gaze_dir", "soft", 1),
-    ("looking back", "回眸", "face", "gaze_turn", "soft", 1),
-    ("looking up", "向上看", "face", "gaze_v", "soft", 1),
-    ("looking down", "向下看", "face", "gaze_v", "soft", 1),
-    ("eye contact", "对视", "face", None, "soft", 1),
+    ("looking at viewer", "看向观众", "view", "view_dir", "soft", 1),
+    ("looking back", "回眸", "view", "view_dir", "soft", 1),
+    ("looking up", "向上看", "view", "view_dir", "soft", 1),
+    ("looking down", "向下看", "view", "view_dir", "soft", 1),
+    ("eye contact", "对视", "view", "view_dir", "soft", 1),
     ("naughty face", "淫荡的表情", "face", None, "hard", 2),
     ("smug", "得意", "face", None, "soft", 1),
     ("shy", "害羞", "face", None, "soft", 1),
@@ -605,38 +613,38 @@ TAGS = [
     ("neon lights", "霓虹灯", "scene", None, "hard", 2),
     ("steam", "水汽/蒸汽", "scene", None, "hard", 2),
     # 景别：framing 组互斥
-    ("close-up", "特写", "scene", "framing", "hard", 2),
-    ("extreme close-up", "极端特写", "scene", "framing", "hard", 2),
-    ("full body", "全身", "scene", "framing", "soft", 1),
-    ("upper body", "上半身", "scene", "framing", "soft", 1),
-    ("cowboy shot", "七分身（牛仔镜头）", "scene", "framing", "soft", 1),
-    ("portrait", "肖像", "scene", "framing", "soft", 1),
+    ("close-up", "特写", "view", "view_framing", "hard", 2),
+    ("extreme close-up", "极端特写", "view", "view_framing", "hard", 2),
+    ("full body", "全身", "view", "view_framing", "soft", 1),
+    ("upper body", "上半身", "view", "view_framing", "soft", 1),
+    ("cowboy shot", "七分身（牛仔镜头）", "view", "view_framing", "soft", 1),
+    ("portrait", "肖像", "view", "view_framing", "soft", 1),
     # 视角：camera 组互斥
-    ("pov", "第一人称视角", "scene", "camera", "hard", 2),
-    ("point of view", "视点镜头", "scene", "camera", "hard", 2),
-    ("from below", "仰视", "scene", "camera", "hard", 2),
-    ("from above", "俯视", "scene", "camera", "hard", 2),
-    ("from behind", "从背后看", "scene", "camera", "hard", 2),
-    ("from side", "侧面", "scene", "camera", "hard", 2),
-    ("dutch angle", "荷兰角（倾斜构图）", "scene", "camera", "hard", 2),
-    ("top-down view", "正上方视角", "scene", "camera", "hard", 2),
-    ("worm's-eye view", "虫视视角", "scene", "camera", "hard", 2),
-    ("bird's-eye view", "鸟瞰视角", "scene", "camera", "hard", 2),
-    ("foreshortening", "透视缩短", "scene", None, "hard", 2),
+    ("pov", "第一人称视角", "view", "view_pov", "hard", 2),
+    ("point of view", "视点镜头", "view", "view_pov", "hard", 2),
+    ("from below", "仰视", "view", "view_angle", "hard", 2),
+    ("from above", "俯视", "view", "view_angle", "hard", 2),
+    ("from behind", "背面视角", "view", "view_dir", "hard", 2),
+    ("from side", "侧面视角", "view", "view_angle", "hard", 2),
+    ("dutch angle", "荷兰角（倾斜构图）", "view", "view_angle", "hard", 2),
+    ("top-down view", "正上方视角", "view", "view_angle", "hard", 2),
+    ("worm's-eye view", "虫视视角", "view", "view_angle", "hard", 2),
+    ("bird's-eye view", "鸟瞰视角", "view", "view_angle", "hard", 2),
+    ("foreshortening", "透视缩短", "view", None, "hard", 2),
     # 焦点区域互斥
-    ("crotch focus", "胯部焦点", "scene", "focus_area", "extreme", 3),
-    ("ass focus", "臀部焦点", "scene", "focus_area", "hard", 2),
-    ("breast focus", "胸部焦点", "scene", "focus_area", "hard", 2),
-    ("feet focus", "足部焦点", "scene", "focus_area", "hard", 2),
+    ("crotch focus", "胯部焦点", "view", "view_focus", "extreme", 3),
+    ("ass focus", "臀部焦点", "view", "view_focus", "hard", 2),
+    ("breast focus", "胸部焦点", "view", "view_focus", "hard", 2),
+    ("feet focus", "足部焦点", "view", "view_focus", "hard", 2),
     # 漫画效果符号
-    ("motion lines", "速度线/动作线", "scene", None, "hard", 2),
+    ("motion lines", "速度线/动作线", "action", "act_motion", "hard", 2),
     ("heart", "爱心符号", "scene", None, "hard", 2),
     ("spoken heart", "爱心语音符号", "scene", None, "hard", 2),
     # 元标签（打码方式互斥）
-    ("censored", "打码", "scene", "censor", "hard", 2),
-    ("mosaic censoring", "马赛克打码", "scene", "censor", "hard", 2),
-    ("bar censor", "黑条打码", "scene", "censor", "hard", 2),
-    ("uncensored", "无码", "scene", "censor", "hard", 2),
+    ("censored", "打码", "view", "view_censor", "hard", 2),
+    ("mosaic censoring", "马赛克打码", "view", "view_censor", "hard", 2),
+    ("bar censor", "黑条打码", "view", "view_censor", "hard", 2),
+    ("uncensored", "无码", "view", "view_censor", "hard", 2),
     ("explicit", "露骨", "scene", None, "hard", 2),
 
     # ---------------- 画质 / 风格 ----------------
@@ -885,8 +893,9 @@ PRESET_EXTRA_SUPPLEMENT = [
     ("spotlight", "聚光灯", "scene", None, "soft", 1),
     ("sparkle", "闪光", "scene", None, "soft", 1),
     ("halloween", "万圣节", "scene", None, "soft", 1),
-    ("standing", "站立", "scene", None, "soft", 1),
-    ("sitting", "坐着", "scene", None, "soft", 1),
+    # `standing` / `sitting` 已挪到「动作/姿势」分类（见 ACTION_TAGS），
+    # 这里不要再定义一遍 —— 两处都写会让 _src_rank 去重变成"谁先谁赢"，
+    # 实测结果是互斥组丢掉、chip 点击互不排斥（组内能同时选中站立+坐着）。
     ("hands in pockets", "手插口袋", "scene", None, "soft", 1),
     ("hands on hips", "双手叉腰", "scene", None, "soft", 1),
 
@@ -1807,6 +1816,136 @@ _NAMED |= {t[0].lower() for t in PRESET_EXTRA_SUPPLEMENT}
 # ⚠️ 这里的合并顺序必须与 as_dict() 的优先级去重结果一致，
 #    否则会出现"界面显示 c=character，索引里却是 preset_extra"的错位，
 #    导致互斥组失效。
+# ---- 动作 / 姿势（v1.10.0 从「姿势参考」里提炼成独立分类）----
+# `act_pose` 互斥：一个人不可能同时站着又躺着。
+# 腿部 / 手臂 / 动态**不互斥** —— "坐着" + "双腿交叉" + "手托腮" 是合理的组合。
+ACTION_TAGS = [
+    # 主姿态（互斥）
+    ("standing", "站立", "action", "act_pose", "soft", 1),
+    ("sitting", "坐着", "action", "act_pose", "soft", 1),
+    ("lying", "躺下", "action", "act_pose", "soft", 1),
+    ("lying on back", "仰躺", "action", "act_pose", "soft", 1),
+    ("lying on stomach", "趴着", "action", "act_pose", "soft", 1),
+    ("lying on side", "侧躺", "action", "act_pose", "soft", 1),
+    ("on back", "仰面朝上", "action", "act_pose", "soft", 1),
+    ("on stomach", "俯卧", "action", "act_pose", "soft", 1),
+    ("on side", "侧卧", "action", "act_pose", "soft", 1),
+    ("prone", "俯身趴伏", "action", "act_pose", "soft", 1),
+    ("crouching", "蹲伏", "action", "act_pose", "soft", 1),
+    ("walking", "行走", "action", "act_pose", "soft", 1),
+    ("running", "奔跑", "action", "act_pose", "soft", 1),
+    ("jumping", "跳跃", "action", "act_pose", "soft", 1),
+    ("leaning forward", "身体前倾", "action", "act_pose", "soft", 1),
+    ("leaning back", "身体后仰", "action", "act_pose", "soft", 1),
+    ("sitting on knees", "跪坐", "action", "act_pose", "soft", 1),
+    ("w-sitting", "W 字坐", "action", "act_pose", "soft", 1),
+    ("lotus position", "盘腿坐", "action", "act_pose", "soft", 1),
+    ("fetal position", "蜷缩抱膝", "action", "act_pose", "soft", 1),
+    ("handstand", "倒立", "action", "act_pose", "soft", 1),
+    ("suspended motion", "悬空动作", "action", "act_pose", "soft", 1),
+
+    # 腿部（可叠加）
+    ("crossed legs", "翘腿/双腿交叉", "action", "act_legs", "soft", 1),
+    ("knees up", "屈膝抬起", "action", "act_legs", "soft", 1),
+    ("knees together", "双膝并拢", "action", "act_legs", "soft", 1),
+    ("legs up", "双腿抬起", "action", "act_legs", "soft", 1),
+    ("foot up", "抬脚", "action", "act_legs", "soft", 1),
+    ("tiptoes", "踮脚", "action", "act_legs", "soft", 1),
+
+    # 手臂（可叠加）
+    ("arms behind head", "双手抱头", "action", "act_arms", "soft", 1),
+    ("arms behind back", "双手背后", "action", "act_arms", "soft", 1),
+    ("hand on own cheek", "手托腮", "action", "act_arms", "soft", 1),
+    ("hand on own chest", "手放胸前", "action", "act_arms", "soft", 1),
+    ("hand on own hip", "手扶腰", "action", "act_arms", "soft", 1),
+    ("hand on own thigh", "手放大腿", "action", "act_arms", "soft", 1),
+    ("hands on own knees", "双手放膝", "action", "act_arms", "soft", 1),
+    ("arms up", "双手举起", "action", "act_arms", "soft", 1),
+    ("stretching", "伸懒腰", "action", "act_arms", "soft", 1),
+    ("hugging own legs", "抱膝", "action", "act_arms", "soft", 1),
+    ("covering mouth", "捂嘴", "action", "act_arms", "soft", 1),
+    ("covering face", "挡脸", "action", "act_arms", "soft", 1),
+    ("hand between legs", "手放腿间", "action", "act_arms", "hard", 2),
+
+    # 动态 / 状态（可叠加）
+    ("motion blur", "动态模糊", "action", "act_motion", "soft", 1),
+    ("motion lines", "速度线/动作线", "action", "act_motion", "soft", 1),
+    ("sweatdrop", "汗滴", "action", "act_motion", "soft", 1),
+    ("trembling", "发抖", "action", "act_motion", "soft", 1),
+    ("stretching arms", "伸展手臂", "action", "act_motion", "soft", 1),
+]
+
+# ---- 镜头 / 视角（v1.10.0 从「场景/视角」里拆出来）----
+VIEW_TAGS = [
+    # 机位（互斥）
+    ("front view", "正面视角", "view", "view_angle", "soft", 1),
+    ("three-quarter view", "四分之三侧面", "view", "view_angle", "soft", 1),
+    ("profile", "正侧面", "view", "view_angle", "soft", 1),
+    ("from above", "俯视（从上往下）", "view", "view_angle", "soft", 1),
+    ("from below", "仰视（从下往上）", "view", "view_angle", "soft", 1),
+    ("high angle", "高角度", "view", "view_angle", "soft", 1),
+    ("low angle", "低角度", "view", "view_angle", "soft", 1),
+    ("dutch angle", "荷兰角（倾斜）", "view", "view_angle", "soft", 1),
+    ("top-down view", "正上方俯视", "view", "view_angle", "soft", 1),
+    ("bird's-eye view", "鸟瞰", "view", "view_angle", "soft", 1),
+    ("worm's-eye view", "虫视（贴地仰拍）", "view", "view_angle", "soft", 1),
+    ("from side", "侧面视角", "view", "view_angle", "soft", 1),
+    ("over-the-shoulder", "越过肩膀", "view", "view_angle", "soft", 1),
+
+    # 朝向（互斥）
+    ("facing viewer", "面向观众", "view", "view_dir", "soft", 1),
+    ("facing away", "背对观众", "view", "view_dir", "soft", 1),
+    ("from behind", "背面视角", "view", "view_dir", "soft", 1),
+    ("looking at viewer", "看向观众", "view", "view_dir", "soft", 1),
+    ("looking away", "视线移开", "view", "view_dir", "soft", 1),
+    ("looking back", "回头看", "view", "view_dir", "soft", 1),
+    ("looking to the side", "看向侧面", "view", "view_dir", "soft", 1),
+    ("looking up", "抬头看", "view", "view_dir", "soft", 1),
+    ("looking down", "低头看", "view", "view_dir", "soft", 1),
+    ("eye contact", "眼神交汇", "view", "view_dir", "soft", 1),
+
+    # 景别（互斥）
+    ("extreme close-up", "极端特写", "view", "view_framing", "soft", 1),
+    ("close-up", "特写", "view", "view_framing", "soft", 1),
+    ("portrait", "胸像", "view", "view_framing", "soft", 1),
+    ("upper body", "上半身", "view", "view_framing", "soft", 1),
+    ("cowboy shot", "七分身（牛仔镜头）", "view", "view_framing", "soft", 1),
+    ("full body", "全身", "view", "view_framing", "soft", 1),
+    ("wide shot", "远景", "view", "view_framing", "soft", 1),
+
+    # 主观视角（互斥）
+    ("pov", "第一人称视角", "view", "view_pov", "soft", 1),
+    ("point of view", "视点镜头", "view", "view_pov", "soft", 1),
+    ("pov hands", "第一人称（露手）", "view", "view_pov", "soft", 1),
+    ("pov crotch", "第一人称（胯下视角）", "view", "view_pov", "hard", 2),
+
+    # 焦点（可叠加）
+    ("crotch focus", "胯部焦点", "view", "view_focus", "hard", 2),
+    ("ass focus", "臀部焦点", "view", "view_focus", "hard", 2),
+    ("breast focus", "胸部焦点", "view", "view_focus", "hard", 2),
+    ("feet focus", "足部焦点", "view", "view_focus", "hard", 2),
+    ("depth of field", "景深虚化", "view", "view_focus", "soft", 1),
+
+    # 画面语言（可叠加）
+    ("foreshortening", "透视缩短", "view", None, "soft", 1),
+    ("symmetry", "对称构图", "view", None, "soft", 1),
+    ("rule of thirds", "三分构图", "view", None, "soft", 1),
+    ("reflection", "镜面倒影", "view", None, "soft", 1),
+    ("silhouette", "剪影", "view", None, "soft", 1),
+
+    # 打码（互斥）
+    ("uncensored", "无码", "view", "view_censor", "soft", 1),
+    ("censored", "打码", "view", "view_censor", "soft", 1),
+    ("mosaic censoring", "马赛克打码", "view", "view_censor", "soft", 1),
+    ("bar censor", "黑条打码", "view", "view_censor", "soft", 1),
+]
+
+# 动作/视角标签并进正式标签库
+TAGS = list(TAGS) + [t for t in ACTION_TAGS if t[0].lower() not in
+                     {x[0].lower() for x in TAGS}]
+TAGS = list(TAGS) + [t for t in VIEW_TAGS if t[0].lower() not in
+                     {x[0].lower() for x in TAGS}]
+
 _TAG_INDEX_SOURCE = (list(TAGS) + list(COPYRIGHT_TAGS) + list(LIGHT_NOVEL_TAGS)
                      + list(PRESET_EXTRA_SUPPLEMENT)
                      + list(CHARACTER_TAGS) + list(SFW_TAGS)
@@ -1814,7 +1953,9 @@ _TAG_INDEX_SOURCE = (list(TAGS) + list(COPYRIGHT_TAGS) + list(LIGHT_NOVEL_TAGS)
 
 _PRIORITY_MAP = {"character": 6, "copyright": 5, "outfit": 4, "body": 4, "prop": 4,
                  "scene": 4, "face": 4, "subject": 4, "act": 4, "foreplay": 4,
-                 "solo": 4, "fluid": 4, "style": 4, "preset_extra": 1}
+                 "solo": 4, "fluid": 4, "style": 4, "preset_extra": 1,
+                 # 动作/视角也已是正式分类，别被同名的旧条目降级覆盖
+                 "action": 5, "view": 5}
 
 
 def _src_rank(item):

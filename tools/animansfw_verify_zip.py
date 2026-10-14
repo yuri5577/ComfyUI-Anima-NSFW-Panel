@@ -122,7 +122,10 @@ if mod is not None:
     # 5. 标签库
     tags = importlib.import_module(PKG_NAME + ".py.tags")
     d = tags.as_dict()
-    check("标签库 11157 条 / 14 分类", len(d["tags"]) == 11157 and len(d["categories"]) == 14,
+    # 标签总数用**下限**断言：每加一批标签都要同步改数字太烦，而且容易忘。
+    # 真正要防的是"标签库塌了"（例如生成脚本出错掉到几百条）。
+    check("标签库 ≥11186 条 / 16 分类",
+          len(d["tags"]) >= 11186 and len(d["categories"]) == 16,
           f'{len(d["tags"])} / {len(d["categories"])}')
     check("每条标签都有中文", all(t.get("zh") for t in d["tags"]))
     cop = [t for t in d["tags"] if t["c"] == "copyright"]
@@ -245,6 +248,28 @@ if mod is not None:
     check("封印者角色都有性别标注",
           all(c.get("gender") in ("1girl", "1boy", "uncertain") for c in _cl),
           f'{sum(1 for c in _cl if c.get("gender") == "uncertain")} 个存疑')
+
+
+    # 动作 / 视角 两个分类（v1.10.0 拆出来的）
+    _act = [x for x in d["tags"] if x["c"] == "action"]
+    _vw = [x for x in d["tags"] if x["c"] == "view"]
+    check("「动作/姿势」分类存在且互斥组正确",
+          len(_act) >= 50
+          and sum(1 for x in _act if x.get("g") == "act_pose") >= 20
+          and all(x.get("g") for x in _act if x["t"] in ("sitting", "standing", "lying")),
+          f'{len(_act)} 个标签，act_pose 组 {sum(1 for x in _act if x.get("g") == "act_pose")} 个')
+    check("「镜头/视角」分类存在且分组正确",
+          len(_vw) >= 45
+          and sum(1 for x in _vw if x.get("g") == "view_angle") >= 10
+          and sum(1 for x in _vw if x.get("g") == "view_framing") >= 6,
+          f'{len(_vw)} 个标签，view_angle {sum(1 for x in _vw if x.get("g") == "view_angle")} 个')
+    # 关键：站立/坐着必须互斥，否则会同时进提示词（这两个原来分散在 scene 和
+    # 别的地方，各写一遍导致 _src_rank 去重时丢掉互斥组）
+    _sit = next((x for x in _act if x["t"] == "sitting"), None)
+    _std = next((x for x in _act if x["t"] == "standing"), None)
+    check("站立/坐着同组互斥（不会同时出现）",
+          bool(_sit and _std and _sit.get("g") == _std.get("g") == "act_pose"),
+          f'sitting.g={_sit and _sit.get("g")}, standing.g={_std and _std.get("g")}')
 
     pc = d["outfit_preset_count"]
     check("服装预设 568 套 / 37 组",

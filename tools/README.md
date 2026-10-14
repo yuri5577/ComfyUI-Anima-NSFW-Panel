@@ -104,3 +104,16 @@ node tools/animansfw_browser_outfit.mjs  # 真浏览器：分组按钮 + 组内�
 
 > ⚠️ 两条防退化断言：**最大组 < 15%**、**没有空组**。
 > 原来「服装库·性感暴露」一组就占 160/518（31%），等于没分类。
+
+## 9. 动作 / 视角快速条（需要先启动 ComfyUI）
+
+```bash
+node tools/animansfw_browser_actview.mjs
+```
+
+测面板顶部那三行（动作 / 腿·手 / 视角）：写入节点、组内互斥、跨组叠加、
+chip 选中态、覆盖视图里隐藏、侧栏两个新分类。
+
+> ⚠️ 定位容器时**别按文字找** —— `querySelectorAll("div")` 返回文档顺序
+> （外层在前），overlay 祖先的文字里也含「腿/手」，会抓到最外层。
+> 用 `d.style.padding === "6px 10px"` 精确定位。

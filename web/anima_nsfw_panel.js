@@ -1714,6 +1714,162 @@ function buildPanel(node, data) {
     });
     main.insertBefore(mineBar, selectedBar);
 
+    // ---- 动作 / 视角 快速选择条 ----
+    //
+    // 用户要的是「动作」「视角」能单独当选项选，而不用去侧栏分类里翻。
+    //
+    // 为什么每个组只给「常用前几个」而不是全部：`act_pose` 有 27 个、
+    // `view_angle` 有 13 个，全铺开要占三四行、把网格挤没。所以这里放最常用的，
+    // 完整清单在侧栏「动作/姿势」「镜头/视角」两个分类里（点「更多」跳过去）。
+    //
+    // 组内互斥交给 select() —— 它本来就会清掉同组的其它标签；
+    // 跨组（例如「坐着」+「翘腿」+「侧面」）可以叠加。
+    const QUICK_ACTION = [
+        ["stand", "站立", "standing"],
+        ["sit", "坐着", "sitting"],
+        ["lie", "躺下", "lying"],
+        ["face_down", "趴着", "lying on stomach"],
+        ["side_lie", "侧躺", "lying on side"],
+        ["kneel", "跪姿", "kneeling"],
+        ["squat", "蹲姿", "squatting"],
+        ["crouch", "蹲伏", "crouching"],
+        ["bent", "弯腰前倾", "bent over"],
+        ["allfours", "四肢着地", "on all fours"],
+        ["walk", "行走", "walking"],
+        ["run", "奔跑", "running"],
+        ["jump", "跳跃", "jumping"],
+        ["lean_fwd", "身体前倾", "leaning forward"],
+        ["lean_back", "身体后仰", "leaning back"],
+    ];
+    // 腿部/手臂：不互斥，可以和主姿态叠加
+    const QUICK_LIMB = [
+        ["crossed", "翘腿", "crossed legs", "act_legs"],
+        ["knees_up", "屈膝", "knees up", "act_legs"],
+        ["legs_open", "张腿", "spread legs", "act_legs"],
+        ["legs_up", "抬腿", "legs up", "act_legs"],
+        ["tiptoes", "踮脚", "tiptoes", "act_legs"],
+        ["arms_head", "抱头", "arms behind head", "act_arms"],
+        ["arms_back", "双手背后", "arms behind back", "act_arms"],
+        ["cheek", "手托腮", "hand on own cheek", "act_arms"],
+        ["hip", "手扶腰", "hand on own hip", "act_arms"],
+        ["cover_mouth", "捂嘴", "covering mouth", "act_arms"],
+    ];
+    const QUICK_VIEW = [
+        ["front", "正面", "front view", "view_angle"],
+        ["three_q", "四分之三侧", "three-quarter view", "view_angle"],
+        ["side", "侧面", "from side", "view_angle"],
+        ["above", "俯视", "from above", "view_angle"],
+        ["below", "仰视", "from below", "view_angle"],
+        ["high", "高角度", "high angle", "view_angle"],
+        ["low", "低角度", "low angle", "view_angle"],
+        ["dutch", "荷兰角", "dutch angle", "view_angle"],
+        ["topdown", "正上方", "top-down view", "view_angle"],
+        ["pov", "主观视角", "pov", "view_pov"],
+        ["behind", "背面", "from behind", "view_dir"],
+        ["look", "看向观众", "looking at viewer", "view_dir"],
+        ["away", "视线移开", "looking away", "view_dir"],
+        ["face_away", "背对", "facing away", "view_dir"],
+        ["closeup", "特写", "close-up", "view_framing"],
+        ["upper", "上半身", "upper body", "view_framing"],
+        ["full", "全身", "full body", "view_framing"],
+        ["wide", "远景", "wide shot", "view_framing"],
+    ];
+
+    const actViewRow = el("div", {
+        display: "flex", flexDirection: "column", gap: "3px",
+        padding: "6px 10px", borderBottom: `1px solid ${THEME.line}`,
+        background: THEME.panel, maxHeight: "132px", overflowY: "auto",
+    });
+    main.insertBefore(actViewRow, selectedBar);
+
+    /** 画一行「标签 + 若干 chip」；组内互斥由 select() 负责 */
+    function quickRow(label, items, color, groupOf) {
+        const row = el("div", {
+            display: "flex", flexWrap: "wrap", gap: "3px", alignItems: "center",
+        });
+        row.appendChild(el("span", {
+            fontSize: "10.5px", color: THEME.dim, flexShrink: "0",
+            width: "34px", textAlign: "right", marginRight: "2px",
+        }, { textContent: label }));
+        for (const it of items) {
+            const [key, zh, tag] = it;
+            const explicit = it[3] || null;
+            const info = tagInfo(tag);
+            const g = explicit || info?.g || null;
+            const on = selected.has(tag.toLowerCase());
+            const b = el("button", {
+                padding: "1.5px 7px", borderRadius: "7px", cursor: "pointer",
+                fontSize: "10.5px", lineHeight: "1.5",
+                border: `1px solid ${on ? color : THEME.line}`,
+                background: on ? `${color}2e` : THEME.panel2,
+                color: on ? color : THEME.text,
+                whiteSpace: "nowrap",
+            }, { textContent: zh, title: `${tag}${g ? `  ·  组 ${g}（同组互斥）` : ""}` });
+            b.__qTag = tag;
+            b.__qGroup = g;
+            b.__qKey = key;
+            b.onclick = () => {
+                if (!selected.has(tag.toLowerCase())) {
+                    // 先清掉同组其它（保险起见；select() 也会做一遍）
+                    if (g) {
+                        for (const k of [...order]) {
+                            const ki = tagInfo(k);
+                            if (ki?.g === g && k.toLowerCase() !== tag.toLowerCase()) {
+                                selected.delete(k.toLowerCase());
+                                const idx = order.indexOf(k);
+                                if (idx >= 0) order.splice(idx, 1);
+                            }
+                        }
+                    }
+                    select(tag);
+                } else {
+                    select(tag);
+                }
+                sync();
+            };
+            row.appendChild(b);
+        }
+        // 「更多」直接跳侧栏分类
+        const more = el("button", {
+            padding: "1.5px 7px", borderRadius: "7px", cursor: "pointer",
+            fontSize: "10.5px", lineHeight: "1.5", marginLeft: "2px",
+            border: `1px dashed ${THEME.line}`, background: "transparent",
+            color: THEME.dim, whiteSpace: "nowrap",
+        }, { textContent: "更多…", title: "跳到侧栏的完整分类" });
+        more.onclick = () => {
+            activeCat = groupOf;
+            workOpen = "";
+            syncCatButtons();
+            renderGrid();
+        };
+        row.appendChild(more);
+        return row;
+    }
+
+    /** chip 的选中态要跟着 selected 变（点标签卡、清空、预设写入都要同步） */
+    function paintQuickRow() {
+        for (const b of actViewRow.querySelectorAll("button")) {
+            if (!b.__qTag) continue;
+            const color = b.__qColor || THEME.accent;
+            const on = selected.has(b.__qTag.toLowerCase());
+            b.style.border = `1px solid ${on ? color : THEME.line}`;
+            b.style.background = on ? `${color}2e` : THEME.panel2;
+            b.style.color = on ? color : THEME.text;
+        }
+    }
+
+    function renderActViewRow() {
+        actViewRow.innerHTML = "";
+        const action = quickRow("动作", QUICK_ACTION, "#4ade80", "action");
+        const limb = quickRow("腿/手", QUICK_LIMB, "#86efac", "action");
+        const view = quickRow("视角", QUICK_VIEW, "#5eead4", "view");
+        for (const [row, color] of [[action, "#4ade80"], [limb, "#86efac"], [view, "#5eead4"]]) {
+            for (const b of row.querySelectorAll("button")) b.__qColor = color;
+            actViewRow.appendChild(row);
+        }
+        paintQuickRow();
+    }
+
     // ---- 底部：预览 + 操作 ----
     const footer = el("div", {
         borderTop: `1px solid ${THEME.line}`, background: THEME.panel,
@@ -1855,6 +2011,9 @@ function buildPanel(node, data) {
         const tagStr = joinTags(order);
         writeTagsSilently(node, tagStr);
         renderSelected();
+        // 动作/视角快速条的选中态要跟着走 —— 点标签卡、清空、套用预设都会改 selected，
+        // 不重绘的话 chip 的亮/暗会和实际选中不一致。
+        try { paintQuickRow(); } catch (e) { /* 面板可能还没建好 */ }
         // 只重画受影响的卡片（被点的 + 互斥组里被顶掉的），不重建整个网格。
         // 传了 touched 就局部重绘；分类切换 / 搜索等场景没有 touched，走整体重建。
         if (touched && touched.length && tagCards.size && !query.trim()) {
@@ -1997,6 +2156,9 @@ function buildPanel(node, data) {
         const overlayView = isOutfit || isPose || isMine || isChar || isStory;
         search.style.display = overlayView ? "none" : "";
         side.style.display = overlayView ? "none" : "";
+        // 动作/视角快速条只在「标签」视图显示 —— 它操作的是标签选择，
+        // 在服装/姿势/角色这些覆盖视图里显示出来只会让人误以为能一起用。
+        actViewRow.style.display = overlayView ? "none" : "flex";
         outfitBar.style.display = isOutfit ? "flex" : "none";
         randomBar.style.display = isOutfit ? "flex" : "none";
         poseBar.style.display = isPose ? "flex" : "none";
@@ -3573,6 +3735,9 @@ function buildPanel(node, data) {
 
     buildTextInputs(footer, node, sync);
     syncCatButtons();
+    // ⚠️ 必须在这里先建好动作/视角快速条：sync() → renderGrid() → renderSelected()
+    //    里会调 paintQuickRow()，晚建的话 chip 的选中态第一次同步不上。
+    renderActViewRow();
     renderSelected();
     renderGrid();
     wireOutfitView();
