@@ -117,3 +117,19 @@ chip 选中态、覆盖视图里隐藏、侧栏两个新分类。
 > ⚠️ 定位容器时**别按文字找** —— `querySelectorAll("div")` 返回文档顺序
 > （外层在前），overlay 祖先的文字里也含「腿/手」，会抓到最外层。
 > 用 `d.style.padding === "6px 10px"` 精确定位。
+
+## 10. 缩略图本地缓存（需要先启动 ComfyUI）
+
+```bash
+node tools/animansfw_browser_thumbs.mjs
+```
+
+测所有缩略图是否都走本地代理（`/anima_nsfw/thumb?u=`）、能否解码、
+二次请求是否命中缓存、缓存按钮与统计接口、批量预热（含非白名单被拒）、
+角色立绘是否也走代理。
+
+> ⚠️ 两个坑（都写进 py/thumb_cache.py 注释了）：
+> 1. `http.client` 的连接**不是线程安全的** —— 连接池必须 `threading.local()`，
+>    否则多线程抢同一条连接会大量失败（串行时看不出问题）
+> 2. `Executor.map` 是**阻塞迭代**，在调用方线程里等结果 ——
+>    想真并发要用 `submit` + `as_completed`

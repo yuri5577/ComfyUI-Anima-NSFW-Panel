@@ -124,6 +124,7 @@ const CARD_LIMIT = 150;
 const STATE = {
     data: null,
     loading: null,
+    storyLoading: null,      // /anima_nsfw/story 的并发去重（剧情视图快速切换会连点）
     showThumbs: null,        // null = 未初始化，默认开
 };
 
@@ -196,6 +197,40 @@ function setShowThumbs(v) {
  */
 const CHAR_THUMB_BASE = "https://blobs.animadex.net/Outputs/thumbs/{}.webp";
 
+// ---------------------------------------------------------------------------
+// 缩略图本地缓存
+//
+// 面板里的预览图（服装 430 + 姿势 297 + 角色 8017）全在**境外 CDN**，
+// 用户反馈「要挂 VPN 才能打开」。改成走后端代理：
+//
+//   浏览器 → 127.0.0.1/anima_nsfw/thumb?u=<原始URL> → 后端下载一次并落盘
+//
+// 之后每次都只读本地磁盘，离线也能用。前端只是把 URL 换个前缀，
+// 加载失败照样能退回「无图」占位。
+// ---------------------------------------------------------------------------
+
+const THUMB_PROXY = "anima_nsfw/thumb";
+const THUMB_STATS_URL = "anima_nsfw/thumb_cache/stats";
+const THUMB_WARM_URL = "anima_nsfw/thumb_cache/warm";
+const THUMB_CLEAR_URL = "anima_nsfw/thumb_cache/clear";
+
+/** 这个 URL 是不是该走本地缓存代理（只代理白名单 CDN，其余原样放行） */
+function cacheable(url) {
+    const u = String(url || "");
+    return u.startsWith("https://cdn.jsdelivr.net/")
+        || u.startsWith("https://fastly.jsdelivr.net/")
+        || u.startsWith("https://gcore.jsdelivr.net/")
+        || u.startsWith("https://testingcf.jsdelivr.net/")
+        || u.startsWith("https://blobs.animadex.net/");
+}
+
+/** 原始 URL → 本地代理 URL（非 CDN 的原样返回） */
+function proxied(url) {
+    const u = String(url || "");
+    if (!u || !cacheable(u)) return u;
+    return `${THUMB_PROXY}?u=${encodeURIComponent(u)}`;
+}
+
 function charThumbUrl(name, copyright) {
     const n = String(name || "").trim();
     if (!n) return "";
@@ -210,7 +245,10 @@ function charThumbUrl(name, copyright) {
 
 /**
  * 造一个带占位/失败兜底的缩略图元素。
- * 图片来自 jsDelivr CDN：加载失败或离线时自动退回纯文字卡片，不会留破图。
+ *
+ * 图片先走**本地缓存代理**（`/anima_nsfw/thumb?u=...`）—— 后端下载一次落盘，
+ * 之后只读本地磁盘，不挂 VPN 也能看。代理不可用（老版本后端 / 非 CDN 域名）时
+ * 自动退回直连原始 URL。
  */
 function makeThumb(url, opts) {
     const { width = 96, height = 150, onFail } = opts || {};
@@ -226,12 +264,20 @@ function makeThumb(url, opts) {
         return box;
     }
     const img = document.createElement("img");
-    img.src = url;
+    const local = proxied(url);
+    img.src = local;
     img.loading = "lazy";
     img.decoding = "async";
     img.referrerPolicy = "no-referrer";
     setStyle(img, `width:100%;height:100%;object-fit:cover;display:block`);
+    let triedDirect = local === url;
     img.addEventListener("error", () => {
+        // 代理失败（缓存目录不可写 / 后端没起来）→ 试一次直连原始 CDN
+        if (!triedDirect) {
+            triedDirect = true;
+            img.src = url;
+            return;
+        }
         box.innerHTML = "";
         box.appendChild(el("span", { fontSize: "10px", color: THEME.dim, padding: "2px" },
             { textContent: "无图" }));
@@ -239,6 +285,25 @@ function makeThumb(url, opts) {
     });
     box.appendChild(img);
     return box;
+}
+
+/** 收集当前面板里所有可缓存的缩略图 URL（用于「缓存全部」） */
+function collectThumbUrls() {
+    const out = new Set();
+    for (const p of (STATE.data?.outfit_presets || [])) {
+        if (p.preview && cacheable(p.preview)) out.add(p.preview);
+    }
+    for (const p of (STATE.data?.pose_presets || [])) {
+        if (p.preview && cacheable(p.preview)) out.add(p.preview);
+    }
+    // 角色立绘：只收**当前可见**的（8017 个全下要几百 MB，让用户自己选）
+    const chars = STATE.charData?.chars || [];
+    for (const c of chars) {
+        if (c.hidden) continue;
+        const u = charThumbUrl(c.n, c.c);
+        if (u) out.add(u);
+    }
+    return [...out];
 }
 
 // ---------------------------------------------------------------------------
@@ -1220,7 +1285,9 @@ function buildPanel(node, data) {
         border: `1px solid ${THEME.line}`, background: THEME.panel2,
         color: showThumbs() ? THEME.text : THEME.dim, whiteSpace: "nowrap",
     }, { textContent: showThumbs() ? "🖼 缩略图 开" : "🖼 缩略图 关",
-         title: "预设卡片的预览图来自 jsDelivr CDN；关掉后只看文字，可完全离线使用" });
+         title: "预设卡片的预览图来自境外 CDN（jsDelivr / animadex）。"
+              + "开着会走后端本地缓存：下过一次就只读本地磁盘，之后不挂 VPN 也能看。"
+              + "关掉后只看文字，完全离线。" });
     thumbBtn.onclick = () => {
         setShowThumbs(!showThumbs());
         thumbBtn.textContent = showThumbs() ? "🖼 缩略图 开" : "🖼 缩略图 关";
@@ -1228,6 +1295,107 @@ function buildPanel(node, data) {
         renderGrid();
     };
     header.appendChild(thumbBtn);
+
+    // ---- 缩略图缓存：状态 + 一键缓存 ----
+    //
+    // 为什么需要这个按钮：缓存是"按需填充"的 —— 用户翻到哪张才下哪张。
+    // 但首屏能看到的图有限，用户希望"一次全弄好，之后彻底不用管"，
+    // 所以给一个显式的批量预热入口。
+    const cacheBtn = el("button", {
+        padding: "6px 10px", borderRadius: "6px", cursor: "pointer", fontSize: "11px",
+        border: `1px solid ${THEME.line}`, background: THEME.panel2,
+        color: THEME.dim, whiteSpace: "nowrap",
+    }, { textContent: "⬇ 缓存缩略图",
+         title: "把服装/姿势/角色预览图抓到本地（服装+姿势约 727 张，"
+              + "角色立绘按当前可见的算）。抓完之后不需要 VPN，也完全离线可用。" });
+    header.appendChild(cacheBtn);
+
+    /** 拉一次缓存统计，更新按钮文案 */
+    async function refreshCacheStats() {
+        try {
+            const r = await fetch(THUMB_STATS_URL, { cache: "no-store" });
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            const s = await r.json();
+            if (s && typeof s.files === "number") {
+                cacheBtn.textContent = s.files
+                    ? `⬇ 已缓存 ${s.files} 张 ${s.mb}MB`
+                    : "⬇ 缓存缩略图";
+                cacheBtn.style.color = s.files ? THEME.text : THEME.dim;
+                cacheBtn.title = `缓存目录：${s.dir}\n`
+                    + `文件 ${s.files} 个 / ${s.mb} MB\n`
+                    + `命中 ${s.hit || 0} 次 · 下载 ${s.download || 0} 次 · 失败 ${s.fail || 0} 次\n`
+                    + `点一下把预览图全部抓到本地；Shift+点 清空缓存。`;
+                return s;
+            }
+        } catch (e) { /* 后端老版本没有这个接口，静默忽略 */ }
+        return null;
+    }
+
+    let cacheBusy = false;
+    cacheBtn.onclick = async (e) => {
+        if (cacheBusy) return;
+        const stats = await refreshCacheStats();
+        if (e?.shiftKey) {
+            if (!stats?.files) { toast("缓存本来就是空的"); return; }
+            if (!confirm(`清空本地缩略图缓存？（${stats.files} 个文件 / ${stats.mb} MB）`)) return;
+            try {
+                const r = await fetch(THUMB_CLEAR_URL, {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ confirm: true }),
+                });
+                const s = await r.json();
+                toast(`已清空 ${s.removed || 0} 个文件，释放 ${s.freed_mb || 0} MB`);
+            } catch (err) {
+                toast(`清空失败：${err.message}`);
+            }
+            refreshCacheStats();
+            return;
+        }
+        // 角色立绘有 8000 多张（几百 MB），不默认全下 —— 先问一下
+        const outfit = (STATE.data?.outfit_presets || []).filter((p) => p.preview).length;
+        const pose = (STATE.data?.pose_presets || []).filter((p) => p.preview).length;
+        const visChars = (STATE.charData?.chars || []).filter((c) => !c.hidden).length;
+        const urls = collectThumbUrls();
+        if (!urls.length) { toast("没有可缓存的缩略图"); return; }
+        const onlyPresets = outfit + pose;
+        const msg = `要缓存 ${urls.length} 张预览图：\n\n`
+            + `· 服装预设 ${outfit} 张\n· 姿势参考 ${pose} 张\n`
+            + `· 角色立绘 ${visChars} 张（可能较大）\n\n`
+            + (urls.length > onlyPresets + 200
+                ? "点「确定」全部缓存；点「取消」只缓存服装+姿势（更快更省空间）。"
+                : "继续？");
+        let list = urls;
+        if (!confirm(msg)) {
+            list = urls.filter((u) => !u.includes("blobs.animadex.net"));
+            if (!list.length) { toast("已取消"); return; }
+        }
+        cacheBusy = true;
+        cacheBtn.textContent = `⏳ 正在缓存 0/${list.length}…`;
+        cacheBtn.style.color = THEME.warn;
+        // 分批请求，边下边报进度（一次全发会阻塞太久看不到反馈）
+        const BATCH = 60;
+        let done = 0, failed = 0;
+        try {
+            for (let i = 0; i < list.length; i += BATCH) {
+                const chunk = list.slice(i, i + BATCH);
+                const r = await fetch(THUMB_WARM_URL, {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ urls: chunk }),
+                });
+                const s = await r.json();
+                done += (s.downloaded || 0) + (s.already || 0);
+                failed += s.failed || 0;
+                cacheBtn.textContent = `⏳ 正在缓存 ${Math.min(i + BATCH, list.length)}/${list.length}…`;
+            }
+            toast(`缓存完成：成功 ${done} 张` + (failed ? `，失败 ${failed} 张` : ""));
+        } catch (err) {
+            toast(`缓存中断：${err.message}`);
+        } finally {
+            cacheBusy = false;
+            cacheBtn.style.color = THEME.dim;
+            await refreshCacheStats();
+        }
+    };
 
     const mineBtn = el("button", {
         padding: "6px 12px", borderRadius: "6px", cursor: "pointer", fontSize: "12px",
@@ -2849,14 +3017,21 @@ function buildPanel(node, data) {
     // ------------------------------------------------------------------
 
     async function loadStory() {
+        // ⚠️ 并发去重：快速切进/切出剧情视图会重复发请求。之前没有守卫，
+        //    两次并发 fetch 时后回来的那次会重写 storyBar；而且如果请求一直不返回，
+        //    界面就停在「正在加载剧情库…」上不动（实测见过这个状态）。
+        if (STATE.storyLoading) return STATE.storyLoading;
         if (storyCache) { renderStoryBar(); renderGrid(); return storyCache; }
         storyBar.innerHTML = "";
         storyBar.appendChild(el("span", { fontSize: "11px", color: THEME.dim },
             { textContent: "正在加载剧情库…" }));
-        try {
+        STATE.storyLoading = (async () => {
             const resp = await fetch(STORY_URL, { cache: "no-cache" });
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-            storyCache = await resp.json();
+            return resp.json();
+        })();
+        try {
+            storyCache = await STATE.storyLoading;
             if (!storyArc && storyCache.arcs?.length) storyArc = storyCache.arcs[0].id;
             renderStoryBar();
             renderGrid();
@@ -2865,6 +3040,8 @@ function buildPanel(node, data) {
             storyBar.innerHTML = "";
             storyBar.appendChild(el("span", { fontSize: "11px", color: THEME.danger },
                 { textContent: `剧情库加载失败：${e.message}` }));
+        } finally {
+            STATE.storyLoading = null;
         }
     }
 
@@ -3755,6 +3932,9 @@ function buildPanel(node, data) {
     }
     // 让侧栏/网格按节点上已有的 mode 值渲染
     applyMode(mode, true);
+    // 缩略图缓存统计（按钮上显示"已缓存 N 张"）。放在最后，
+    // 不跟首屏抢带宽 —— 它只是个头部的数字。
+    refreshCacheStats();
     setTimeout(() => search.focus(), 40);
     return overlay;
 }

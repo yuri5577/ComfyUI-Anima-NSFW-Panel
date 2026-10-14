@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import traceback
 
@@ -24,6 +25,7 @@ except Exception:  # pragma: no cover
 
 from . import custom_store as cs
 from . import mod_guidance as mg
+from . import thumb_cache as tc
 from .prompt_builder import preview
 from .tags import as_dict
 
@@ -44,6 +46,81 @@ def register_routes() -> bool:
             return _json(as_dict())
         except Exception as exc:  # pragma: no cover
             return _json({"error": str(exc), "trace": traceback.format_exc()}, 500)
+
+    # ------------------------------------------------------------------
+    # 缩略图本地缓存
+    #
+    # 面板的预览图全部来自境外 CDN（jsDelivr / animadex），用户反馈要挂 VPN。
+    # 前端改成请求这里，后端负责"下载一次 → 存本地 → 之后只读磁盘"。
+    # ------------------------------------------------------------------
+
+    @routes.get("/anima_nsfw/thumb")
+    async def anima_nsfw_thumb(request):
+        url = str(request.query.get("u") or "").strip()
+        if not url:
+            return web.Response(body=tc.TRANSPARENT_PNG,
+                                content_type="image/png",
+                                headers={"X-Anima-Cache": "miss"})
+        force = str(request.query.get("force") or "") in ("1", "true", "yes")
+        # 下载是阻塞 IO，扔到线程池，别卡住 aiohttp 的事件循环
+        loop = asyncio.get_running_loop()
+        path, err, hit = await loop.run_in_executor(
+            None, lambda: tc.fetch(url, force=force))
+        if not path:
+            # 失败也返回一张 1×1 透明图（前端就不会出现破图边框），
+            # 并把原因放在 header 里方便排查。**不缓存失败结果**。
+            return web.Response(body=tc.TRANSPARENT_PNG, content_type="image/png",
+                                headers={"X-Anima-Cache": "miss",
+                                         "X-Anima-Error": (err or "unknown")[:180]})
+        try:
+            with open(path, "rb") as f:
+                data = f.read()
+        except Exception as exc:  # noqa: BLE001
+            return web.Response(body=tc.TRANSPARENT_PNG, content_type="image/png",
+                                headers={"X-Anima-Cache": "miss",
+                                         "X-Anima-Error": f"read {exc}"[:180]})
+        return web.Response(
+            body=data, content_type=tc.content_type(path),
+            headers={
+                "X-Anima-Cache": "hit" if hit else "stored",
+                # 内容不会变，长缓存；文件名带 URL 哈希，改了 URL 就是新文件
+                "Cache-Control": "public, max-age=2592000, immutable",
+            })
+
+    @routes.get("/anima_nsfw/thumb_cache/stats")
+    async def anima_nsfw_thumb_stats(_request):
+        try:
+            s = tc.stats()
+            return _json(s)
+        except Exception as exc:  # pragma: no cover
+            return _json({"error": str(exc)}, 500)
+
+    @routes.post("/anima_nsfw/thumb_cache/warm")
+    async def anima_nsfw_thumb_warm(request):
+        """批量预热。前端把当前需要的 URL 列表发过来，后台慢慢下。"""
+        try:
+            payload = await request.json()
+        except Exception:
+            payload = {}
+        urls = payload.get("urls") or []
+        if not isinstance(urls, list):
+            return _json({"ok": False, "error": "urls 必须是数组"}, 400)
+        force = bool(payload.get("force"))
+        loop = asyncio.get_running_loop()
+        res = await loop.run_in_executor(None, lambda: tc.warm(urls, force=force))
+        return _json({"ok": True, **res, **tc.stats()})
+
+    @routes.post("/anima_nsfw/thumb_cache/clear")
+    async def anima_nsfw_thumb_clear(request):
+        try:
+            payload = await request.json()
+        except Exception:
+            payload = {}
+        if not bool(payload.get("confirm")):
+            return _json({"ok": False, "error": "需要 confirm: true"}, 400)
+        loop = asyncio.get_running_loop()
+        res = await loop.run_in_executor(None, tc.clear)
+        return _json({**res, **tc.stats()})
 
     @routes.post("/anima_nsfw/preview")
     async def anima_nsfw_preview(request):

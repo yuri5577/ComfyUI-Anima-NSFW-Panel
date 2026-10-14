@@ -728,10 +728,24 @@ if (!btn) {
           if (imgs.length) {
             ok(`角色卡片带立绘 <img> ${imgs.length} 张`);
             const u = String(imgs[0].src || "");
-            if (u.startsWith("https://blobs.animadex.net/Outputs/thumbs/") && u.endsWith(".webp")) {
-              ok("立绘 URL 格式正确", decodeURIComponent(u).slice(0, 62));
+            // ⚠️ v1.11.0 起缩略图走**本地缓存代理**（为了不挂 VPN 也能看）：
+            //    src = anima_nsfw/thumb?u=<编码后的原始 URL>
+            //    所以断言要拆成"确实经过代理" + "原始地址仍是 animadex 立绘"。
+            const viaProxy = u.includes("anima_nsfw/thumb?u=");
+            let raw = u;
+            try {
+              const q = u.slice(u.indexOf("u=") + 2);
+              raw = decodeURIComponent(q);
+            } catch (e) { /* ignore */ }
+            const okRaw = raw.startsWith("https://blobs.animadex.net/Outputs/thumbs/")
+              && raw.endsWith(".webp");
+            if (viaProxy && okRaw) {
+              ok("立绘 URL 经本地代理且原始地址正确", raw.slice(0, 58));
+            } else if (!viaProxy && okRaw) {
+              // 代理不可用时前端会退回直连，也算对
+              ok("立绘 URL 直连（代理不可用时的兜底）", raw.slice(0, 58));
             } else {
-              bad("立绘 URL 格式不对: " + u.slice(0, 80));
+              bad("立绘 URL 格式不对: " + u.slice(0, 90));
             }
             if (u.includes("%2C%20") || u.includes(", ")) {
               ok("立绘 URL 用了 `角色名, 作品名`");

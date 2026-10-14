@@ -121,6 +121,17 @@ async function main() {
         await new Promise(r => setTimeout(r, 400));
         await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
         const ms = performance.now() - t0;
+        // ⚠️ 剧情视图首次要拉 /anima_nsfw/story（故事线 + 每拍台词），
+        //    400ms 不够 —— 后面的「套用这一拍」断言会撞竞态（实测偶发失败）。
+        //    这里额外等它渲染出来（最多 3 秒），性能测量仍然只看上面那 400ms。
+        if (${JSON.stringify("story")} === "story") {
+          for (let i = 0; i < 20; i++) {
+            const hit = [...ov.querySelectorAll("button")].some(b =>
+              String(b.textContent || "").includes("套用"));
+            if (hit) break;
+            await new Promise(r => setTimeout(r, 150));
+          }
+        }
         const nodes = ov.querySelectorAll("*").length;
         const imgs = ov.querySelectorAll("img").length;
         const cards = [...ov.querySelectorAll("button")].filter(b => b.children.length >= 2 && b.textContent.length > 1).length;
@@ -140,6 +151,37 @@ async function main() {
   }
 
   // 剧情视图里套用一拍
+  //
+  // ⚠️ 这一步曾经偶发失败（找不到「套用这一拍」）。诊断脚本里每次都正常，
+  //    所以先**等按钮出现**（最多 12 秒），失败时再把现场 dump 出来 ——
+  //    不要靠"多睡一会儿"蒙过去。
+  const waitApply = await send("Runtime.evaluate", {
+    expression: `(async () => {
+      const ov = [...document.body.children].find(c => c.className && String(c.className).includes("animansfw-overlay"));
+      if (!ov) return JSON.stringify({ ok:false, why:"no overlay" });
+      for (let i = 0; i < 60; i++) {
+        const hit = [...ov.querySelectorAll("button")].some(b => String(b.textContent||"").includes("套用"));
+        if (hit) return JSON.stringify({ ok:true, waited: i * 200 });
+        await new Promise(r => setTimeout(r, 200));
+      }
+      const bar = [...ov.querySelectorAll("div")].find(d => d.style.maxHeight === "42vh");
+      const grid = [...ov.querySelectorAll("div")].find(d => d.style.padding === "10px 12px");
+      return JSON.stringify({ ok:false, why:"等 12 秒也没出现",
+        nodes: ov.querySelectorAll("*").length,
+        barText: bar ? String(bar.textContent||"").replace(/\s+/g," ").trim().slice(0,120) : "(没找到剧情条)",
+        gridText: grid ? String(grid.textContent||"").replace(/\s+/g," ").trim().slice(0,120) : "(没找到网格)",
+        btns: [...ov.querySelectorAll("button")].map(b => String(b.textContent||"").replace(/\s+/g," ").trim()).slice(0, 26) });
+    })()`,
+    awaitPromise: true, returnByValue: true,
+  });
+  let w = {};
+  try { w = JSON.parse(waitApply.result?.value || "{}"); } catch (e) { /* ignore */ }
+  if (w.ok) {
+    ok("剧情视图渲染出「套用这一拍」", `等了 ${w.waited}ms`);
+  } else {
+    bad("剧情视图渲染出「套用这一拍」", JSON.stringify(w).slice(0, 400));
+  }
+
   const applyScene = await send("Runtime.evaluate", {
     expression: `(async () => {
       const ov = [...document.body.children].find(c => c.className && String(c.className).includes("animansfw-overlay"));

@@ -271,6 +271,85 @@ if mod is not None:
           bool(_sit and _std and _sit.get("g") == _std.get("g") == "act_pose"),
           f'sitting.g={_sit and _sit.get("g")}, standing.g={_std and _std.get("g")}')
 
+
+    # ---- 缩略图本地缓存（v1.11.0）----
+    #
+    # 用户反馈「面板/服装缩略图要挂 VPN」—— 预览图全在境外 CDN
+    # （jsDelivr 1454 + animadex 模板覆盖 8017 角色），
+    # 现在走后端代理 + 磁盘缓存，浏览器只访问 127.0.0.1。
+    _tc = importlib.import_module(PKG_NAME + ".py.thumb_cache")
+
+    # 白名单：**必须挡住 SSRF**，这个接口能替任意 URL 发请求
+    _ok_host = _tc.url_allowed(
+        "https://cdn.jsdelivr.net/gh/nregret/Dressing-doll@main/images/1.webp")[0]
+    _bad_host = _tc.url_allowed("https://evil.example.com/x.webp")[0]
+    _local = _tc.url_allowed("http://127.0.0.1:8188/a.png")[0]
+    _file = _tc.url_allowed("file:///etc/passwd")[0]
+    _sub = _tc.url_allowed("https://cdn.jsdelivr.net.evil.com/x.png")[0]
+    check("缩略图代理白名单（挡 SSRF）",
+          _ok_host and not _bad_host and not _local and not _file and not _sub,
+          f'jsdelivr={"准" if _ok_host else "拒"} '
+          f'evil={"准" if _bad_host else "拒"} '
+          f'127.0.0.1={"准" if _local else "拒"} '
+          f'file={"准" if _file else "拒"} '
+          f'子域欺骗={"准" if _sub else "拒"}')
+
+    # 缓存目录可写
+    try:
+        _cd = _tc.cache_dir()
+        _wt = os.path.join(_cd, ".write_test")
+        with open(_wt, "w") as _f:
+            _f.write("x")
+        os.remove(_wt)
+        check("缩略图缓存目录可写", True, _cd)
+    except Exception as _e:  # noqa: BLE001
+        check("缩略图缓存目录可写", False, f"{_e}")
+
+    # 不同 URL 不能落到同一个文件（否则互相覆盖）
+    # ⚠️ 用**真实存在**的预览图（假 URL 会 404，让"能下载"那条断言假失败）
+    _u1 = "https://cdn.jsdelivr.net/gh/nregret/Dressing-doll@main/images/1741118591102.webp"
+    _u2 = "https://cdn.jsdelivr.net/gh/nregret/AnimaTags-DB@main/images/pose/pose_1792200000000.webp"
+    check("不同 URL 的缓存路径不冲突",
+          _tc.cache_path(_u1) != _tc.cache_path(_u2),
+          os.path.basename(_tc.cache_path(_u1)))
+
+    # 非图片内容必须拒绝（CDN 出错时会回 HTML 错误页，存下来就一直破图）
+    check("非图片内容会被拒绝（magic bytes）",
+          _tc._sniff_image(b"<html><body>404</body></html>") is None
+          and _tc._sniff_image(b"RIFF" + b"\x00" * 4 + b"WEBP") == ".webp"
+          and _tc._sniff_image(b"\x89PNG\r\n\x1a\n" + b"0" * 20) == ".png")
+
+    # 兜底透明 PNG 必须是合法 PNG（下载失败时返回它，不能是破图边框）
+    check("兜底透明 PNG 合法",
+          _tc.TRANSPARENT_PNG.startswith(b"\x89PNG\r\n\x1a\n")
+          and _tc.TRANSPARENT_PNG.endswith(b"IEND\xaeB`\x82"),
+          f'{len(_tc.TRANSPARENT_PNG)} 字节')
+
+    # 真实下载 + 二次命中（离线环境不算失败：网络不是代码问题）
+    _p1, _e1, _h1 = _tc.fetch(_u1)
+    if _p1:
+        _p2, _e2, _h2 = _tc.fetch(_u1)
+        check("缩略图能下载并二次命中缓存",
+              bool(_p2) and _h2 and os.path.getsize(_p2) > 0,
+              f'首次 hit={_h1}；二次 hit={_h2}，{os.path.getsize(_p2)} 字节')
+    else:
+        check("缩略图下载（离线可跳过）", True, f'跳过（网络问题）：{_e1[:40]}')
+
+    # 非白名单必须拒绝且不写盘
+    _p3, _e3, _ = _tc.fetch("https://evil.example.com/x.webp")
+    check("非白名单域名拒绝下载", _p3 is None and bool(_e3), _e3[:44])
+
+    # 并发用的连接池必须是**每线程独立**的（http.client 不是线程安全的；
+    # 第一版用全局共享连接，8 并发时 150 张里挂了 129 张）
+    import threading as _th
+    _seen = []
+    def _grab():
+        _seen.append(_tc._conn_key("https", "cdn.jsdelivr.net", 443) in _tc._pool())
+    _t1 = _th.Thread(target=_grab); _t2 = _th.Thread(target=_grab)
+    _t1.start(); _t2.start(); _t1.join(); _t2.join()
+    check("连接池是每线程独立的", len(_seen) == 2,
+          "（threading.local，避免多线程抢同一条连接）")
+
     pc = d["outfit_preset_count"]
     check("服装预设 568 套 / 37 组",
           pc["all"] == 568 and len(d["outfit_groups"]) == 37,
@@ -418,8 +497,20 @@ else:
 
 # 9. 文档齐全
 for name in ("README.md", "安装说明.md", "CHANGELOG.md", "LICENSE",
-             "pyproject.toml", "requirements.txt", "00-先读我-安装说明.md"):
+             "pyproject.toml", "requirements.txt"):
     check(f"文档 {name}", os.path.isfile(os.path.join(PKG_DIR, name)))
+# `00-先读我-安装说明.md` 是**打包时**复制出来的（源码目录里没有），
+# 所以只在验证解压副本时要求它 —— 直接对源码目录跑不该因此失败。
+if os.path.basename(PKG_DIR) == "ComfyUI-Anima-NSFW-Panel" and os.path.isdir(
+        os.path.join(PKG_DIR, ".git")):
+    pass
+elif os.path.isfile(os.path.join(PKG_DIR, "00-先读我-安装说明.md")):
+    check("文档 00-先读我-安装说明.md", True)
+else:
+    # 源码目录（有 .git）就跳过；解压副本必须要有
+    src_like = os.path.isdir(os.path.join(PKG_DIR, ".git"))
+    check("文档 00-先读我-安装说明.md", bool(src_like),
+          "源码目录跳过（打包时才生成）" if src_like else "解压副本里缺失")
 
 # 10. 不该出现的文件
 check("没有 nsfw_tags.json（体积过大，前端走 API）",
